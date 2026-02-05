@@ -1,0 +1,73 @@
+# PyInstaller
+/build/
+/dist/
+*.spec
+*.exe
+*.dll
+
+# Runtime artifacts
+life_calendar_wallpaper.png
+wallpaper.log
+wallpaper.log.*
+.life_calendar.lock
+
+# Config & backups
+life_calendar_config.json
+*.bak
+test_config.json
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Project specific
+*.tmp
+*.bak
+wallpaper.log
+
+# Generated wallpaper (stored in user home)
+# life_calendar_wallpaper.png
