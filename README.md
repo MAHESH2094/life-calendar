@@ -14,6 +14,21 @@ Built to be scheduler-safe, crash-resilient, and uninstall-clean.
 - **Atomic file locking** – Race-condition safe, crash-resilient
 - **Portable uninstall** – No registry writes, all files in one directory
 
+
+
+##Screenshots
+Life in Weeks
+doc/docsscreenshotslife_weeks.png.png
+
+Year Progress
+doc/Screenshot 2026-02-05 171004.png
+
+Goal Progress
+
+doc/Screenshot 2026-02-05 171342.png
+
+
+Year Progress
 ## How It Works
 
 **GUI Mode** (`LifeCalendar.exe`)
