@@ -16,16 +16,20 @@ Built to be scheduler-safe, crash-resilient, and uninstall-clean.
 
 
 
-##Screenshots
-Life in Weeks
-doc/docsscreenshotslife_weeks.png.png
+## Screenshots
 
-Year Progress
-doc/Screenshot 2026-02-05 171004.png
+### Life in Weeks
 
-Goal Progress
+![Life in Weeks](docs/screenshots/life_weeks.png)
 
-doc/Screenshot 2026-02-05 171342.png
+### Year Progress
+
+![Year Progress](docs/screenshots/year_progress.png)
+
+### Goal Progress
+
+![Goal Progress](docs/screenshots/goal_progress.png)
+
 
 
 Year Progress
