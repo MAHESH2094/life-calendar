@@ -20,15 +20,15 @@ Built to be scheduler-safe, crash-resilient, and uninstall-clean.
 
 ### Life in Weeks
 
-![Life in Weeks](docs/screenshots/life_weeks.png)
+![Life in Weeks](https://github.com/MAHESH2094/life-calendar/blob/main/life_weeks.png?raw=true)
 
 ### Year Progress
 
-![Year Progress](docs/screenshots/year_progress.png)
+![Year Progress](https://github.com/MAHESH2094/life-calendar/blob/main/year_progress.png?raw=true)
 
 ### Goal Progress
 
-![Goal Progress](docs/screenshots/goal_progress.png)
+![Goal Progress](https://github.com/MAHESH2094/life-calendar/blob/main/goal_progress.png?raw=true)
 
 
 
