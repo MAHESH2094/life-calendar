@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<!--
+  Life Calendar Wallpaper — Task Scheduler Config
+  
+  BEFORE IMPORTING: Replace the placeholders below with your actual paths:
+    - PYTHON_PATH     → full path to python.exe  (e.g. C:\Python313\python.exe)
+    - SCRIPT_PATH     → full path to auto_update.py (e.g. C:\life-calendar\auto_update.py)
+    - WORKING_DIR     → folder containing auto_update.py (e.g. C:\life-calendar)
+  
+  Or if using the EXE build, change the <Command> to LifeCalendarUpdate.exe path
+  and remove the <Arguments> line.
+  
+  IMPORT:  schtasks /Create /XML "LifeCalendar_Task.xml" /TN "LifeCalendarUpdate"
+  DELETE:  schtasks /Delete /TN "LifeCalendarUpdate" /F
+-->
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Life Calendar Wallpaper - Daily at midnight, on startup, and on wake/unlock</Description>
+    <URI>\LifeCalendarUpdate</URI>
+  </RegistrationInfo>
+
+  <!-- ==================== TRIGGERS ==================== -->
+  <Triggers>
+    <!-- 1. Daily at 00:01 AM — normal midnight update -->
+    <CalendarTrigger>
+      <StartBoundary>2026-01-01T00:01:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByDay>
+        <DaysInterval>1</DaysInterval>
+      </ScheduleByDay>
+    </CalendarTrigger>
+
+    <!-- 2. On system boot — catches missed days when PC was off overnight -->
+    <BootTrigger>
+      <Enabled>true</Enabled>
+      <Delay>PT60S</Delay>
+    </BootTrigger>
+
+    <!-- 3. On session unlock/wake — catches laptop lid-open or resume from sleep -->
+    <SessionStateChangeTrigger>
+      <Enabled>true</Enabled>
+      <Delay>PT10S</Delay>
+      <StateChange>SessionUnlock</StateChange>
+    </SessionStateChangeTrigger>
+  </Triggers>
+
+  <!-- ==================== SETTINGS ==================== -->
+  <Principals>
+    <Principal id="Author">
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+
+  <Settings>
+    <!-- Run even on battery (laptops) -->
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+
+    <!-- If midnight was missed (PC was off), run ASAP when available -->
+    <StartWhenAvailable>true</StartWhenAvailable>
+
+    <!-- Don't stack runs — if already running, skip the new trigger -->
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+
+    <!-- Kill if stuck for more than 5 minutes -->
+    <ExecutionTimeLimit>PT5M</ExecutionTimeLimit>
+    <AllowHardTerminate>true</AllowHardTerminate>
+
+    <!-- Allow manual "Run" from Task Scheduler UI -->
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+
+    <!-- Don't require idle — run immediately -->
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+
+    <!-- No network needed (fully offline) -->
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <WakeToRun>false</WakeToRun>
+    <Priority>7</Priority>
+  </Settings>
+
+  <!-- ==================== ACTION ==================== -->
+  <Actions Context="Author">
+    <!--
+      OPTION A: Running from Python source
+      Replace PYTHON_PATH, SCRIPT_PATH, and WORKING_DIR with your actual paths.
+    -->
+    <Exec>
+      <Command>PYTHON_PATH</Command>
+      <Arguments>"SCRIPT_PATH"</Arguments>
+      <WorkingDirectory>WORKING_DIR</WorkingDirectory>
+    </Exec>
+
+    <!--
+      OPTION B: Running from EXE (uncomment below, comment out Option A)
+      <Exec>
+        <Command>C:\path\to\LifeCalendarUpdate.exe</Command>
+        <WorkingDirectory>C:\path\to\</WorkingDirectory>
+      </Exec>
+    -->
+  </Actions>
+</Task>

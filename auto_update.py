@@ -41,6 +41,50 @@ if not getattr(sys, 'frozen', False):
     sys.path.insert(0, str(BASE_DIR))
 
 
+def needs_update() -> bool:
+    """
+    Check if wallpaper was already updated today.
+    Uses timestamp file to prevent duplicate updates from multiple triggers.
+    Returns True if update needed, False if already done today.
+    
+    NOTE: This is READ-ONLY. Use mark_updated() after confirming success.
+    """
+    from datetime import date
+    
+    timestamp_file = BASE_DIR / ".last_update_date"
+    today_str = str(date.today())
+    
+    try:
+        if timestamp_file.exists():
+            with open(timestamp_file, 'r') as f:
+                last_update = f.read().strip()
+            
+            if last_update == today_str:
+                # Already updated today, skip
+                return False
+        
+        return True
+        
+    except OSError:
+        # If we can't read/write timestamp, update anyway
+        return True
+
+
+def mark_updated() -> None:
+    """
+    Write today's date to timestamp file.
+    Call ONLY after confirming wallpaper update succeeded.
+    """
+    from datetime import date
+    
+    timestamp_file = BASE_DIR / ".last_update_date"
+    try:
+        with open(timestamp_file, 'w') as f:
+            f.write(str(date.today()))
+    except OSError:
+        pass  # Non-critical - worst case we update again
+
+
 def main() -> int:
     """
     Main entry point for auto-update.
@@ -65,6 +109,11 @@ def main() -> int:
     
     logger.info("=" * 50)
     logger.info("Auto-update started")
+    
+    # Check if already updated today (prevents duplicate updates from multiple triggers)
+    if not needs_update():
+        logger.info("Wallpaper already updated today - skipping")
+        return 0
     
     # NOTE: Scheduler registration is handled by GUI, not updater
     # This keeps the updater focused on a single responsibility: updating wallpaper
@@ -96,6 +145,9 @@ def main() -> int:
         
         if success:
             logger.info("Auto-update completed successfully")
+            
+            # Mark as updated ONLY after confirmed success
+            mark_updated()
             
             # Clean up any old error files
             for error_file_name in [

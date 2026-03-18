@@ -5,31 +5,38 @@ Built to be scheduler-safe, crash-resilient, and uninstall-clean.
 
 ## Features
 
-- **Life-in-weeks visualization** – Your entire life as a grid
-- **Year progress calendar** – Day-by-day tracking for current year
-- **Goal countdown mode** – Custom date ranges for any objective
-- **GUI configuration + headless updater** – Point-and-click setup, background automation
-- **Windows / Linux / macOS support** – Multi-OS compatible
-- **Safe for Task Scheduler / cron** – Absolute paths, no relative dependencies
-- **Atomic file locking** – Race-condition safe, crash-resilient
-- **Portable uninstall** – No registry writes, all files in one directory
+* **Life-in-weeks visualization** – Your entire life as a grid of weeks.  
+* **Year-progress calendar** – Day-by-day tracking for the current year.  
+* **Goal-countdown mode** – Custom date ranges for any objective.  
+* **Simple Tkinter GUI** – No extra GUI libraries required; runs on any recent Python.  
+* **Headless updater** – Runs silently via Task Scheduler (Windows) or `cron` (Linux/macOS).  
+* **Cross-platform** – Works on Windows, macOS, and Linux (multiple desktop environments).  
+* **Atomic file locking & safe paths** – Crash-resilient, scheduler-friendly.
 
-## How It Works
+## Quick start
 
-**GUI Mode** (`LifeCalendar.exe`)
-- Configure calendar mode, dates, resolution
-- Generate and immediately set wallpaper
-- Save settings to config file
+1. **From source** – Install the Python dependencies and launch the GUI:  
+   ```bash
+   pip install -r requirements.txt
+   python life_calendar_gui.py   # Tkinter window opens
+   ```  
+2. Configure your dates, choose a mode, press **Enter** (or click the button).  
+3. The wallpaper is set immediately and a daily task is created for automatic updates.  
 
-**Headless Mode** (`LifeCalendarUpdate.exe`)
-- Runs silently via Task Scheduler (Windows) / cron (Linux/macOS)
-- Regenerates wallpaper based on saved config
-- Updates desktop automatically
+> **Note:** The original README mentioned an `INSTALL.bat` and "PyQt6".  
+> Those artefacts are no longer part of the project – the GUI uses **Tkinter**, which is bundled with Python, and there is no installer script required.
 
-**Engine** (`wallpaper_engine.py`)
-- Pure generation logic
-- Strict validation, comprehensive logging
-- Portable across operating systems
+## Keyboard shortcuts
+
+* **Enter** – Generate and set wallpaper.  
+* **Esc**   – Close the application.
+
+## Development
+
+* `build_exe.py` – PyInstaller wrapper that produces `LifeCalendar.exe` (GUI) and `LifeCalendarUpdate.exe` (headless).  
+* `auto_update.py` – The script that the scheduler runs; it does **only** the update work.  
+* `life_calendar_gui.py` – Pure Tkinter UI; all heavy lifting lives in `wallpaper_engine.py`.  
+* `wallpaper_engine.py` – Core generation, validation, rendering, and OS-specific wallpaper setting.
 
 ## Installation
 
@@ -40,6 +47,14 @@ pip install -r requirements.txt
 python life_calendar_gui.py
 ```
 
+### Upgrading from v1
+
+If you previously ran v1, make sure to reinstall dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
 ### Build Standalone EXE
 
 ```bash
@@ -48,35 +63,21 @@ python build_exe.py
 
 Output: `LifeCalendar_Package/LifeCalendar.exe` (GUI) and `LifeCalendarUpdate.exe` (headless)
 
-## Development
+---
 
-- `wallpaper_engine.py` – Calendar generation, file locking, cross-platform wallpaper setting
-- `life_calendar_gui.py` – PyQt6 configuration interface
-- `auto_update.py` – Task scheduler integration
-- `build_exe.py` – PyInstaller packaging
+## 🔧 Configuration
 
-## Testing
+Edit `life_calendar_config.json` directly or use the GUI:
 
-All tests are production-level:
-- Config corruption handling
-- Lock race conditions
-- Scheduler working directory independence
-- Crash recovery (stale lock detection)
-- Absolute path resolution
-- Multi-platform compatibility
-
-See `wallpaper.log` for execution details.
-
-## License
-
-MIT
+```json
+{
+  "mode": "life",
+  "dob": "1990-01-15",
   "lifespan": 90,
   "resolution_width": 1920,
   "resolution_height": 1080
 }
 ```
-
-Edit this file directly or use the GUI.
 
 ---
 
@@ -88,7 +89,7 @@ Check `wallpaper.log` in the same folder as the EXE for detailed error messages.
 
 ### Task didn't auto-create?
 
-Run LifeCalendarUpdate.exe manually once - it will create the task on first run.
+Import `LifeCalendar_Task.xml` into Task Scheduler, or set up manually via `taskschd.msc`.
 
 ### Linux: Wallpaper not changing?
 
@@ -98,21 +99,11 @@ Check `wallpaper.log` - different desktop environments need different commands. 
 
 ## 📝 Development
 
-### Build EXE
-
-```bash
-# Install build dependencies
-pip install pyinstaller pillow screeninfo
-
-# Build
-python build_exe.py
-```
-
 ### Project Layout
 
 ```
 life_calendar/
-├── life_calendar_gui.py      # GUI interface
+├── life_calendar_gui.py      # GUI interface (tkinter)
 ├── wallpaper_engine.py       # Core generation logic
 ├── auto_update.py            # Headless scheduler runner
 ├── build_exe.py              # Build script
@@ -122,6 +113,13 @@ life_calendar/
     ├── LifeCalendarUpdate.exe
     ├── life_calendar_config.json
     └── wallpaper.log
+```
+
+### Build EXE
+
+```bash
+pip install pyinstaller pillow screeninfo
+python build_exe.py
 ```
 
 ---

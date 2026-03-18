@@ -15,10 +15,15 @@ The wallpaper updates automatically every day at midnight!
 
 QUICK START
 ───────────
-1. Run INSTALL.bat (right-click → Run as Administrator for best results)
-2. Configure your settings in the GUI that opens
-3. Click "Generate & Set Wallpaper"
-4. Done! Wallpaper will update every day at 12:01 AM
+1. **From source** – Install the required Python packages and run the GUI:  
+   ```
+   pip install -r requirements.txt
+   python life_calendar_gui.py
+   ```
+2. Configure your dates, choose a mode (life / year / goal) and press **Enter** (or click the button).  
+3. The wallpaper is applied immediately; a hidden task is created so it updates each night at 00:01 am.  
+
+> The original instructions referred to an `INSTALL.bat` and a PyQt6 GUI – those have been removed. The application now uses the standard-library Tkinter, so no extra GUI framework is needed.
 
 
 FILES INCLUDED
@@ -26,7 +31,7 @@ FILES INCLUDED
   LifeCalendar.exe         - GUI application (run anytime to change settings)
   LifeCalendarUpdate.exe   - Auto-updater (runs silently at midnight)
   life_calendar_config.json - Your saved settings
-  INSTALL.bat              - One-click installer
+  LifeCalendar_Task.xml    - Task Scheduler config (for manual import)
   README.txt               - This file
 
 
@@ -50,7 +55,7 @@ CALENDAR MODES
 
 MANUAL TASK SCHEDULER SETUP
 ───────────────────────────
-If INSTALL.bat didn't work, set up manually:
+If automatic scheduling isn't working, set up manually:
 
 1. Press Win+R, type: taskschd.msc
 2. Click "Create Basic Task"
@@ -65,10 +70,10 @@ If INSTALL.bat didn't work, set up manually:
 TROUBLESHOOTING
 ───────────────
 Problem: Wallpaper not updating at midnight
-Solution: Check Task Scheduler is running. Run INSTALL.bat as Administrator.
+Solution: Check Task Scheduler is running. Import LifeCalendar_Task.xml or set up manually.
 
 Problem: "Access Denied" error
-Solution: Run INSTALL.bat as Administrator (right-click → Run as Administrator)
+Solution: Run LifeCalendar.exe as Administrator (right-click → Run as Administrator)
 
 Problem: Wallpaper looks wrong
 Solution: Open LifeCalendar.exe and set correct screen resolution

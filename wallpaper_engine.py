@@ -46,6 +46,13 @@ BASE_DIR = get_base_dir()
 LOG_PATH = os.path.join(BASE_DIR, "wallpaper.log")
 LOCK_FILE = os.path.join(BASE_DIR, ".life_calendar.lock")
 
+# -----------------------------------------------------------------------
+# Configuration constants
+# -----------------------------------------------------------------------
+# Maximum size for a single grid cell (pixels).
+# Adjustable for high-DPI monitors (e.g., 4K displays may need 30-40px).
+MAX_CELL_SIZE = 20
+
 # Rotating log handler (max 500KB, keep 3 backups)
 # NOTE: RotatingFileHandler is not fully multiprocess-safe but QueueHandler
 # adds complexity. For this app, scheduler runs at midnight and GUI during day,
@@ -335,9 +342,17 @@ class GridLayout:
         self._calculate_dimensions()
     
     def _get_columns(self) -> int:
-        """Determine optimal column count per mode"""
+        """Determine optimal column count per mode, landscape-aware"""
         if self.mode == 'life':
-            return 52  # Weeks per year
+            # On landscape screens, use more columns to fill horizontal space
+            # Standard: 52 weeks/year. But 52 cols × ~90 rows = portrait grid.
+            # Double columns on landscape canvases for better space usage.
+            aspect = self.canvas_width / self.canvas_height if self.canvas_height > 0 else 1
+            if aspect >= 1.3:
+                # Landscape screen: use 104 columns (2 years per row)
+                # This gives ~45 rows instead of ~90, fitting landscape much better
+                return 104
+            return 52  # Portrait/square screens keep traditional layout
         elif self.mode == 'year':
             return 31  # Days per month style
         elif self.mode == 'goal':
@@ -349,17 +364,22 @@ class GridLayout:
         return 52
     
     def _calculate_dimensions(self) -> None:
-        """Calculate cell size and grid position"""
+        """Calculate cell size and grid position - landscape-aware"""
         # Dynamic margins instead of hardcoded pixels
         available_width = self.canvas_width * 0.9
         available_height = self.canvas_height * 0.75
         
-        # Calculate maximum cell size
-        max_cell_width = available_width / self.columns
-        max_cell_height = available_height / self.rows
+        # Fit to available WIDTH first (landscape-friendly)
+        # Account for gaps between cells
+        cell_from_width = (available_width - (self.columns - 1) * 2) / self.columns
         
-        # Cell size (cap at 20px for aesthetics)
-        self.cell_size = int(min(max_cell_width, max_cell_height, 20))
+        # Check if resulting grid height fits
+        cell_from_height = (available_height - (self.rows - 1) * 2) / self.rows
+        
+        # Use the smaller of the two to ensure grid fits both dimensions
+        # Cap at MAX_CELL_SIZE constant for consistent aesthetics
+        self.cell_size = int(min(cell_from_width, cell_from_height, MAX_CELL_SIZE))
+        self.cell_size = max(self.cell_size, 2)  # Floor at 2px minimum
         self.gap = int(max(2, self.cell_size * 0.15))
         
         # Grid dimensions
@@ -404,7 +424,7 @@ class WallpaperRenderer:
         ]
     }
     
-    # Class-level font cache
+    # Class-level font cache (so fonts are loaded only once per process)
     _font_cache = {}
     
     def __init__(self, width: int, height: int):
@@ -416,7 +436,7 @@ class WallpaperRenderer:
         self._load_fonts()
     
     def _load_fonts(self) -> None:
-        """Load fonts with proper OS detection and fallbacks (uses cache)"""
+        """Load fonts with proper OS detection and robust fall-backs (uses cache)"""
         system = platform.system()
         
         # Check cache first
@@ -457,19 +477,18 @@ class WallpaperRenderer:
                 continue
         
         if not loaded:
-            logger.warning("Custom fonts not available, using PIL default with size adjustment")
-            # Use PIL's better default font with size hints (won't affect but documents intent)
-            try:
-                # Try to use a more modern default
-                self.title_font = ImageFont.load_default()
-                self.stats_font = ImageFont.load_default()
-                self.legend_font = ImageFont.load_default()
-            except Exception as e:
-                logger.error(f"Failed to load default font: {e}")
-                # Last resort - None will fallback to PIL default
-                self.title_font = None
-                self.stats_font = None
-                self.legend_font = None
+            logger.warning("Custom fonts not available – falling back to Pillow's default")
+            # -----------------------------------------------------------------------
+            # If we fall out of the loop without loading any custom font, we fall back
+            # to Pillow's built-in default font. The previous implementation set the
+            # attributes to ``None`` which could raise ``TypeError`` when Pillow tries
+            # to draw text. Keeping a real ImageFont instance (even the simplest one)
+            # guarantees the renderer never crashes.
+            # -----------------------------------------------------------------------
+            default_font = ImageFont.load_default()
+            self.title_font = default_font
+            self.stats_font = default_font
+            self.legend_font = default_font
     
     def draw_title(self, text: str, y_position: float) -> None:
         """Draw centered title"""
@@ -559,6 +578,9 @@ class WallpaperEngine:
             config_file = os.path.join(base_dir, config_file)
         
         self.config_file = config_file
+        # The wallpaper is written next to the executable/script.
+        # ``BASE_DIR`` already points at the correct absolute directory
+        # (script folder or the PyInstaller bundle directory).
         self.wallpaper_path = os.path.join(BASE_DIR, "life_calendar_wallpaper.png")
         self.config = self.load_config()
     
@@ -935,7 +957,6 @@ if __name__ == "__main__":
             logger.error("Wallpaper update failed - check wallpaper.log")
             sys.exit(1)
         else:
-            logger.info("Wallpaper updated successfully")
             sys.exit(0)
             
     except Exception as e:

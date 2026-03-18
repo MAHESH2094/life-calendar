@@ -97,25 +97,30 @@ def main():
     all_success = True
     
     # 1. Remove scheduled task (Windows)
-    print("[1/5] Checking scheduled task...")
+    print("[1/6] Checking scheduled task...")
     all_success = remove_scheduled_task() and all_success
     
-    # 2. Remove lock file
-    print("\n[2/5] Removing lock file...")
+    # 2. Remove timestamp file
+    print("\n[2/5] Removing timestamp file...")
+    timestamp_file = BASE_DIR / ".last_update_date"
+    all_success = remove_file(timestamp_file, "timestamp file") and all_success
+    
+    # 3. Remove lock file
+    print("\n[3/5] Removing lock file...")
     lock_file = BASE_DIR / ".life_calendar.lock"
     all_success = remove_file(lock_file, "lock file") and all_success
     
-    # 3. Remove wallpaper file
-    print("\n[3/5] Removing wallpaper...")
+    # 4. Remove wallpaper file
+    print("\n[4/5] Removing wallpaper...")
     wallpaper_file = BASE_DIR / "life_calendar_wallpaper.png"
     all_success = remove_file(wallpaper_file, "wallpaper") and all_success
     
-    # 4. Remove logs
-    print("\n[4/5] Removing log files...")
+    # 5. Remove logs
+    print("\n[5/5] Removing log files...")
     all_success = remove_log_files() and all_success
     
-    # 5. Remove error marker files
-    print("\n[5/5] Removing error markers...")
+    # 6. Remove error marker files
+    print("\n[6/6] Removing error markers...")
     for err_file in ["ERROR_CONFIG_NOT_FOUND.txt", "ERROR_GENERATION_FAILED.txt", "ERROR_IMPORT_FAILED.txt"]:
         remove_file(BASE_DIR / err_file, "error file")
     
