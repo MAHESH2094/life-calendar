@@ -25,13 +25,12 @@ if platform.system() == "Windows":
     try:
         # Modern API (Win8.1+) - best quality
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
-    except Exception as e:
-        logger.debug(f"Modern DPI awareness API failed, trying fallback: {e}")
+    except Exception:
         try:
             # Fallback API (Win7+)
             ctypes.windll.user32.SetProcessDPIAware()
-        except Exception as e:
-            logger.debug(f"Fallback DPI awareness API also failed, using default: {e}")
+        except Exception:
+            pass  # DPI awareness is optional, continue without logging
 
 # ==================== LOGGING SETUP ====================
 

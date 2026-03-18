@@ -287,7 +287,7 @@ class DailyCheckinStore:
         """Write data atomically with temp file + rename to prevent corruption."""
         import tempfile
         import os
-        
+
         try:
             # Write to temp file in the same directory
             # Use a simple approach: write to temp file, close it properly, then rename
@@ -296,7 +296,7 @@ class DailyCheckinStore:
             try:
                 with os.fdopen(fd, 'w', encoding='utf-8') as temp_file:
                     temp_file.write(json.dumps(self._data, indent=2))
-                
+
                 # Atomic rename - either succeeds or fails to completion (on POSIX)
                 # On Windows, replace() will overwrite the destination
                 self.path.parent.mkdir(parents=True, exist_ok=True)
