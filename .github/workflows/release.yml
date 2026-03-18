@@ -1,0 +1,51 @@
+# .github/workflows/release.yml
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller pytest
+
+    - name: Run tests
+      run: pytest -q
+
+    - name: Build EXE
+      run: python build_exe.py
+
+    - name: Generate checksums
+      run: |
+        cd LifeCalendar_Package
+        Get-FileHash -Algorithm SHA256 *.exe | ForEach-Object {
+          "$($_.Hash)  $($_.Path | Split-Path -Leaf)"
+        } | Out-File -FilePath SHA256SUMS.txt -Encoding utf8
+      shell: pwsh
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          LifeCalendar_Package/LifeCalendar.exe
+          LifeCalendar_Package/LifeCalendarUpdate.exe
+          LifeCalendar_Package/SHA256SUMS.txt
+        generate_release_notes: true

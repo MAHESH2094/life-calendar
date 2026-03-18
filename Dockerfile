@@ -11,8 +11,17 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY . /app
 
-# The container will continuously run the updater.
-# The auto_update script only generates a wallpaper when the date has changed,
-# so running it frequently has minimal overhead. This keeps the container alive
-# and ensures responsive updates even if dates change during container uptime.
-CMD ["bash","-c","while true; do python auto_update.py; sleep 60; done"]
+# Expose log file path via environment variable for volume-mounted configs
+ENV LOG_PATH=/app/config/wallpaper.log
+
+# Run as non-root user for security
+RUN groupadd -g 1000 lifecal && \
+    useradd -u 1000 -g lifecal -s /bin/bash lifecal && \
+    chown -R lifecal:lifecal /app
+USER lifecal
+
+# Make entrypoint executable
+RUN chmod +x /app/docker-entrypoint.sh
+
+# Use entrypoint script with graceful shutdown support
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

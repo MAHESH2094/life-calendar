@@ -6,7 +6,7 @@ Version 2.0 - Improved with better validation and UX
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, simpledialog
 from datetime import date, datetime
 import json
 import os
@@ -231,6 +231,58 @@ class LifeCalendarGUI:
             command=lambda: threading.Thread(target=self.preview_wallpaper, daemon=True).start()
         )
         preview_btn.pack(side="left", padx=5)
+        
+        # Secondary buttons row
+        btn_frame2 = tk.Frame(self.root, bg="#050505")
+        btn_frame2.pack(pady=5)
+        
+        color_btn = tk.Button(
+            btn_frame2,
+            text="🎨 Colours",
+            font=("Arial", 10),
+            bg="#1a2a1a",
+            fg="#8fd68f",
+            activebackground="#213021",
+            relief="flat",
+            bd=0,
+            padx=15,
+            pady=8,
+            cursor="hand2",
+            command=self.pick_color
+        )
+        color_btn.pack(side="left", padx=5)
+        
+        reset_btn = tk.Button(
+            btn_frame2,
+            text="↻ Reset",
+            font=("Arial", 10),
+            bg="#2a1a1a",
+            fg="#d68f8f",
+            activebackground="#302121",
+            relief="flat",
+            bd=0,
+            padx=15,
+            pady=8,
+            cursor="hand2",
+            command=self.reset_defaults
+        )
+        reset_btn.pack(side="left", padx=5)
+        
+        help_btn = tk.Button(
+            btn_frame2,
+            text="❓ Help",
+            font=("Arial", 10),
+            bg="#1a2a2a",
+            fg="#8fa8d6",
+            activebackground="#212a30",
+            relief="flat",
+            bd=0,
+            padx=15,
+            pady=8,
+            cursor="hand2",
+            command=self.show_help
+        )
+        help_btn.pack(side="left", padx=5)
         
         # Status
         self.status_label = tk.Label(
@@ -527,6 +579,19 @@ class LifeCalendarGUI:
         
         if preset == "Auto-detect":
             width, height = get_screen_resolution()
+            
+            # Show confirmation dialog
+            if messagebox.askyesno(
+                "Auto-detect Resolution",
+                f"Detected: {width}×{height}\n\nUse this resolution?"
+            ):
+                self.width_entry.delete(0, tk.END)
+                self.width_entry.insert(0, str(width))
+                self.height_entry.delete(0, tk.END)
+                self.height_entry.insert(0, str(height))
+            else:
+                # Revert to Custom preset
+                self.preset_var.set("Custom")
         elif preset == "Custom":
             return  # Don't change custom values
         else:
@@ -535,12 +600,12 @@ class LifeCalendarGUI:
                 width, height = resolution
             else:
                 return
-        
-        # Update entry fields
-        self.width_entry.delete(0, tk.END)
-        self.width_entry.insert(0, str(width))
-        self.height_entry.delete(0, tk.END)
-        self.height_entry.insert(0, str(height))
+            
+            # Update entry fields
+            self.width_entry.delete(0, tk.END)
+            self.width_entry.insert(0, str(width))
+            self.height_entry.delete(0, tk.END)
+            self.height_entry.insert(0, str(height))
     
     def on_mode_change(self, event=None) -> None:
         """Handle mode changes"""
@@ -702,6 +767,88 @@ class LifeCalendarGUI:
         except Exception as e:
             messagebox.showerror("Error", str(e))
             self.status_label.config(text=f"Error: {str(e)}")
+    
+    def pick_color(self) -> None:
+        """Open colour picker and save to palette config"""
+        from tkinter import colorchooser
+        
+        # Get current palette colours if any exist
+        palette = self.config.get('palette', {})
+        
+        # Prompt for named colour
+        colour_name = tk.simpledialog.askstring(
+            "Add Colour",
+            "Enter a name for this colour (e.g., 'primary', 'highlight'):"
+        )
+        
+        if not colour_name:
+            return
+        
+        # Open colour picker
+        color_data = colorchooser.askcolor(title=f"Pick colour for '{colour_name}'")
+        if color_data[1]:  # RGB and HEX returned
+            hex_color = color_data[1]
+            palette[colour_name] = hex_color
+            self.config['palette'] = palette
+            self.save_config()
+            messagebox.showinfo(
+                "Colour Saved",
+                f"Colour '{colour_name}': {hex_color}\n\nSaved to config"
+            )
+            self.status_label.config(text=f"✓ Colour '{colour_name}' saved")
+    
+    def reset_defaults(self) -> None:
+        """Reset configuration to defaults"""
+        if messagebox.askyesno(
+            "Reset Configuration",
+            "Reset all settings to defaults?\n\nYou can always reload the config file."
+        ):
+            # Get default config from engine
+            self.config = self._default_config()
+            self.save_config()
+            
+            # Reload UI
+            self.load_config()
+            self.create_ui()
+            
+            messagebox.showinfo("Reset", "Configuration reset to defaults")
+            self.status_label.config(text="✓ Configuration reset to defaults")
+    
+    def show_help(self) -> None:
+        """Show help/about modal"""
+        help_text = """
+🎨 LIFE CALENDAR WALLPAPER GENERATOR
+
+Version 2.1 | Cross-platform wallpaper automation
+
+─────────────────────────────────────────
+
+📋 MODES:
+  • Life: Week-based calendar for your entire life
+  • Year: Daily progress for the current year
+  • Goal: Custom date range tracker
+
+⌨️ SHORTCUTS:
+  • Enter: Generate and set wallpaper
+  • Esc: Quit application
+
+🎯 FEATURES:
+  • Auto-update: Daily refresh at midnight
+  • Custom colours: Save favourite palettes
+  • Multiple resolutions: Up to 4K UHD
+  • Cross-platform: Windows, macOS, Linux
+
+📖 HELP & LINKS:
+  • GitHub: github.com/MAHESH2094/life-calendar
+  • Docs: See README.md for full guide
+
+─────────────────────────────────────────
+
+For questions or issues, visit the GitHub repository.
+
+Made with 💙 for life planning & visualization.
+"""
+        messagebox.showinfo("Help & About", help_text)
     
     def run(self) -> None:
         """Run application"""

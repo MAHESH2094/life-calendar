@@ -70,6 +70,25 @@ def needs_update() -> bool:
         return True
 
 
+def _wallpaper_recently_modified() -> bool:
+    """
+    Rate-limit guard: returns True if the wallpaper PNG was modified
+    less than 5 minutes ago.  Prevents infinite-loop edge cases when
+    the system clock jumps or the container restarts rapidly.
+    """
+    import time
+
+    wallpaper = BASE_DIR / "life_calendar_wallpaper.png"
+    try:
+        if wallpaper.exists():
+            age_seconds = time.time() - wallpaper.stat().st_mtime
+            if age_seconds < 300:  # 5 minutes
+                return True
+    except OSError:
+        pass
+    return False
+
+
 def mark_updated() -> None:
     """
     Write today's date to timestamp file.
@@ -113,6 +132,11 @@ def main() -> int:
     # Check if already updated today (prevents duplicate updates from multiple triggers)
     if not needs_update():
         logger.info("Wallpaper already updated today - skipping")
+        return 0
+    
+    # Rate-limit: skip if wallpaper was modified very recently (< 5 min)
+    if _wallpaper_recently_modified():
+        logger.info("Wallpaper was modified less than 5 minutes ago - rate limited")
         return 0
     
     # NOTE: Scheduler registration is handled by GUI, not updater

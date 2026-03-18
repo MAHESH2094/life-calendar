@@ -1,6 +1,9 @@
 # Life Calendar Wallpaper
 
 ![CI](https://github.com/MAHESH2094/life-calendar/actions/workflows/ci.yml/badge.svg)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![GitHub release](https://img.shields.io/github/v/release/MAHESH2094/life-calendar)](https://github.com/MAHESH2094/life-calendar/releases)
+[![codecov](https://codecov.io/gh/MAHESH2094/life-calendar/graph/badge.svg)](https://codecov.io/gh/MAHESH2094/life-calendar)
 
 A production-grade desktop wallpaper generator that visualizes life, year, or goal progress.
 Built to be scheduler-safe, crash-resilient, and uninstall-clean.
