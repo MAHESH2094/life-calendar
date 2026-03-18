@@ -1,38 +1,21 @@
-"""
-Build Script - Creates standalone EXE files for distribution
-Run: python build_exe.py
+"""Build the single-file Windows package for Life Calendar."""
 
-Requirements:
-  pip install pyinstaller pillow screeninfo
-
-Output:
-  LifeCalendar_Package/
-  ├── LifeCalendar.exe           (GUI - run anytime to configure)
-  ├── LifeCalendarUpdate.exe     (Headless - runs silently via Task Scheduler)
-  ├── life_calendar_config.json  (default config)
-  └── README.txt                 (user instructions)
-"""
-
-import subprocess
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
-# Project version - used for naming
-PROJECT_VERSION = "2.0.0"
-
-# Paths
+PROJECT_VERSION = "3.0.0"
 BASE_DIR = Path(__file__).parent.absolute()
 OUTPUT_DIR = BASE_DIR / "LifeCalendar_Package"
 DIST_DIR = BASE_DIR / "dist"
 BUILD_DIR = BASE_DIR / "build"
 
 
-def cleanup():
-    """Clean build artifacts BEFORE building"""
+def cleanup() -> None:
+    """Remove old build artifacts."""
     print("[CLEAN] Removing old build artifacts...")
-
-    for dir_path in [BUILD_DIR, DIST_DIR]:
+    for dir_path in (BUILD_DIR, DIST_DIR):
         if dir_path.exists():
             shutil.rmtree(dir_path)
             print(f"        Removed {dir_path.name}/")
@@ -42,17 +25,16 @@ def cleanup():
         print(f"        Removed {spec_file.name}")
 
 
-def run_command(cmd: list, description: str) -> bool:
-    """Run a command and return success status"""
+def run_command(cmd: list[str], description: str) -> bool:
+    """Run a subprocess and report success."""
     print(f"\n[BUILD] {description}")
-
     try:
         subprocess.run(cmd, check=True, capture_output=False)
         print(f"[OK]    {description} - SUCCESS")
         return True
-    except subprocess.CalledProcessError as e:
+    except subprocess.CalledProcessError as exc:
         print(f"[FAIL]  {description} - FAILED")
-        print(f"        Error: {e}")
+        print(f"        Error: {exc}")
         return False
     except FileNotFoundError:
         print(f"[FAIL]  {description} - FAILED")
@@ -60,100 +42,54 @@ def run_command(cmd: list, description: str) -> bool:
         return False
 
 
-def build_gui():
-    """Build the GUI application"""
+def build_app() -> bool:
+    """Build the GUI application and bundled command modes."""
     cmd = [
         sys.executable,
         "-m",
         "PyInstaller",
         "--onefile",
         "--windowed",
-        "--name", "LifeCalendar",
+        "--name",
+        "LifeCalendar",
         "--clean",
         "--noconfirm",
         "--hidden-import=screeninfo",
         "--hidden-import=PIL",
-        str(BASE_DIR / "life_calendar_gui.py")
+        "--hidden-import=auto_update",
+        str(BASE_DIR / "life_calendar_gui.py"),
     ]
-    return run_command(cmd, "Building GUI (LifeCalendar.exe)")
+    return run_command(cmd, "Building LifeCalendar.exe")
 
 
-def build_updater():
-    """Build the headless updater - SILENT, NO CONSOLE"""
-    cmd = [
-        sys.executable,
-        "-m",
-        "PyInstaller",
-        "--onefile",
-        "--noconsole",  # NO CONSOLE - runs silently
-        "--name", "LifeCalendarUpdate",
-        "--clean",
-        "--noconfirm",
-        "--hidden-import=screeninfo",
-        "--hidden-import=PIL",
-        str(BASE_DIR / "auto_update.py")
-    ]
-    return run_command(cmd, "Building Updater (LifeCalendarUpdate.exe)")
-
-
-def verify_exes_exist():
-    """Hard fail if EXEs are missing"""
-    gui_exe = DIST_DIR / "LifeCalendar.exe"
-    update_exe = DIST_DIR / "LifeCalendarUpdate.exe"
-
-    if not gui_exe.exists():
-        raise RuntimeError(f"FATAL: GUI EXE not found: {gui_exe}")
-
-    if not update_exe.exists():
-        raise RuntimeError(f"FATAL: Updater EXE not found: {update_exe}")
-
-
-def create_package():
-    """Create the distribution package folder"""
+def create_package() -> None:
+    """Collect the packaged output."""
     print("\n[PACKAGE] Creating distribution package...")
 
-    # Verify EXEs exist before packaging
-    try:
-        verify_exes_exist()
-    except RuntimeError as e:
-        print(f"[FAIL]   {e}")
-        raise
+    exe_path = DIST_DIR / "LifeCalendar.exe"
+    if not exe_path.exists():
+        raise RuntimeError(f"FATAL: GUI EXE not found: {exe_path}")
 
-    # Clean and create output directory
     if OUTPUT_DIR.exists():
         shutil.rmtree(OUTPUT_DIR)
     OUTPUT_DIR.mkdir(parents=True)
 
-    # Copy EXE files
-    gui_exe = DIST_DIR / "LifeCalendar.exe"
-    update_exe = DIST_DIR / "LifeCalendarUpdate.exe"
-
-    shutil.copy(gui_exe, OUTPUT_DIR)
+    shutil.copy(exe_path, OUTPUT_DIR)
     print("[OK]     Copied LifeCalendar.exe")
 
-    shutil.copy(update_exe, OUTPUT_DIR)
-    print("[OK]     Copied LifeCalendarUpdate.exe")
-
-    # Copy config file
-    config_file = BASE_DIR / "life_calendar_config.json"
-    if config_file.exists():
-        shutil.copy(config_file, OUTPUT_DIR)
-        print("[OK]     Copied life_calendar_config.json")
-
-    # Copy README
-    readme_file = BASE_DIR / "README.txt"
-    if readme_file.exists():
-        shutil.copy(readme_file, OUTPUT_DIR)
-        print("[OK]     Copied README.txt")
+    for filename in ("life_calendar_config.json", "README.txt", "uninstall.py", "windows_automation.py"):
+        src = BASE_DIR / filename
+        if src.exists():
+            shutil.copy(src, OUTPUT_DIR)
+            print(f"[OK]     Copied {filename}")
 
     print(f"[OK]     Package created: {OUTPUT_DIR}")
 
 
-def cleanup_after():
-    """Clean up build artifacts AFTER packaging"""
+def cleanup_after() -> None:
+    """Remove PyInstaller scratch artifacts after packaging."""
     print("\n[CLEAN]  Cleaning up build artifacts...")
-
-    for dir_path in [BUILD_DIR, DIST_DIR]:
+    for dir_path in (BUILD_DIR, DIST_DIR):
         if dir_path.exists():
             shutil.rmtree(dir_path)
             print(f"         Removed {dir_path.name}/")
@@ -163,18 +99,20 @@ def cleanup_after():
         print(f"         Removed {spec_file.name}")
 
 
-def main():
-    print(f"""
+def main() -> None:
+    print(
+        f"""
 ========================================================
             LIFE CALENDAR - BUILD v{PROJECT_VERSION}
 ========================================================
 
-This script creates standalone EXE files for distribution
-""")
+This script creates the single-file desktop package.
+"""
+    )
 
-    # Check PyInstaller
     try:
         import PyInstaller
+
         print(f"[OK]     PyInstaller v{PyInstaller.__version__} found")
     except ImportError:
         print("[FAIL]   PyInstaller not installed!")
@@ -182,25 +120,16 @@ This script creates standalone EXE files for distribution
         sys.exit(1)
 
     try:
-        # Clean BEFORE building
         cleanup()
 
-        # Build both EXEs
-        gui_success = build_gui()
-        if not gui_success:
+        if not build_app():
             raise RuntimeError("GUI build failed")
 
-        update_success = build_updater()
-        if not update_success:
-            raise RuntimeError("Updater build failed")
-
-        # Package EXEs
         create_package()
-
-        # Clean AFTER packaging
         cleanup_after()
 
-        print(f"""
+        print(
+            f"""
 ========================================================
                   BUILD COMPLETE!
 ========================================================
@@ -208,18 +137,19 @@ This script creates standalone EXE files for distribution
 Package: {OUTPUT_DIR}
 
 Files:
-  - LifeCalendar.exe         (GUI, {PROJECT_VERSION})
-  - LifeCalendarUpdate.exe   (Headless updater, silent)
+  - LifeCalendar.exe          (GUI + --headless-update + --startup-check, {PROJECT_VERSION})
   - life_calendar_config.json (default configuration)
-  - README.txt               (user guide)
+  - README.txt                (user guide)
+  - uninstall.py              (cleanup helper)
+  - windows_automation.py     (task cleanup dependency)
 
 Ready to distribute!
 
 ========================================================
-""")
-
-    except Exception as e:
-        print(f"\n[FAIL]   Build failed: {e}")
+"""
+        )
+    except Exception as exc:
+        print(f"\n[FAIL]   Build failed: {exc}")
         sys.exit(1)
 
 

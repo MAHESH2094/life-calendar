@@ -59,8 +59,9 @@ def needs_update() -> bool:
             with open(timestamp_file, 'r') as f:
                 last_update = f.read().strip()
 
-            if last_update == today_str:
-                # Already updated today, skip
+            # If last_update equals or exceeds today (handles clock jumps backward), skip
+            if last_update >= today_str:
+                # Already updated today, or clock jump detected - skip
                 return False
 
         return True

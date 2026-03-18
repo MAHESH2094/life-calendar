@@ -32,7 +32,11 @@ def _write_config(tmp_path):
         "lifespan": 90,
         "resolution_width": 1920,
         "resolution_height": 1080,
-        "config_version": 3,
+        "config_version": 4,
+        "automation": {
+            "startup_enabled": True,
+            "wallpaper_refresh_enabled": True,
+        },
     }
     cfg_path = tmp_path / "life_calendar_config.json"
     cfg_path.write_text(json.dumps(cfg))

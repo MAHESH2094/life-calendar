@@ -140,11 +140,12 @@ class TestMainEntrypoint:
             "lifespan": 90,
             "resolution_width": 1920,
             "resolution_height": 1080,
+            "config_version": 4,
         }))
 
         with patch("life_calendar_cli.CONFIG_PATH", config_path), \
              patch("life_calendar_cli.BASE_DIR", temp_dir), \
-             patch("wallpaper_engine.WallpaperEngine.run_auto", return_value=(True, "OK")):
+             patch("wallpaper_engine.WallpaperEngine.run_auto", return_value=True):
             from life_calendar_cli import _run_once
             with pytest.raises(SystemExit) as exc_info:
                 _run_once()

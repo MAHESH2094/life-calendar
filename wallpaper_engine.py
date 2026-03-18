@@ -18,17 +18,20 @@ from logging.handlers import RotatingFileHandler
 from typing import Tuple, List, Optional
 import shutil
 
+from daily_companion import get_today_metrics, merge_config
+
 # ==================== DPI AWARENESS (Windows) ====================
 if platform.system() == "Windows":
     try:
         # Modern API (Win8.1+) - best quality
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Modern DPI awareness API failed, trying fallback: {e}")
         try:
             # Fallback API (Win7+)
             ctypes.windll.user32.SetProcessDPIAware()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Fallback DPI awareness API also failed, using default: {e}")
 
 # ==================== LOGGING SETUP ====================
 
@@ -91,7 +94,8 @@ def _is_process_running(pid: int) -> bool:
                 kernel32.CloseHandle(handle)
                 return True
             return False
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Could not check process {pid} status: {e}")
             return False
     else:
         # Unix: check if process exists
@@ -139,8 +143,8 @@ def release_lock():
     try:
         if os.path.exists(LOCK_FILE):
             os.remove(LOCK_FILE)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Could not clean up lock file: {e}")
 
 
 # ==================== HELPER FUNCTIONS ====================
@@ -164,12 +168,17 @@ def get_screen_resolution() -> Tuple[int, int]:
         monitors = get_monitors()
         if monitors:
             primary = monitors[0]
-            return primary.width, primary.height
+            if primary.width >= 800 and primary.height >= 600:
+                logger.info(f"Detected screen resolution: {primary.width}x{primary.height}")
+                return primary.width, primary.height
+            else:
+                logger.warning(f"Detected resolution {primary.width}x{primary.height} is below 800x600 minimum, using fallback")
     except ImportError:
         logger.warning("screeninfo not installed, using default resolution")
     except Exception as e:
         logger.warning(f"Could not detect screen resolution: {e}")
 
+    logger.info("Using fallback resolution: 1920x1080")
     return 1920, 1080  # Default fallback
 
 
@@ -444,7 +453,9 @@ class WallpaperRenderer:
         if cache_key in WallpaperRenderer._font_cache:
             fonts = WallpaperRenderer._font_cache[cache_key]
             self.title_font = fonts['title']
+            self.headline_font = fonts['headline']
             self.stats_font = fonts['stats']
+            self.subtitle_font = fonts['subtitle']
             self.legend_font = fonts['legend']
             return
 
@@ -455,18 +466,24 @@ class WallpaperRenderer:
             try:
                 if os.path.exists(font_path):
                     title_font = ImageFont.truetype(font_path, 40)
+                    headline_font = ImageFont.truetype(font_path, 26)
                     stats_font = ImageFont.truetype(font_path, 18)
+                    subtitle_font = ImageFont.truetype(font_path, 16)
                     legend_font = ImageFont.truetype(font_path, 16)
 
                     # Cache the fonts
                     WallpaperRenderer._font_cache[cache_key] = {
                         'title': title_font,
+                        'headline': headline_font,
                         'stats': stats_font,
+                        'subtitle': subtitle_font,
                         'legend': legend_font
                     }
 
                     self.title_font = title_font
+                    self.headline_font = headline_font
                     self.stats_font = stats_font
+                    self.subtitle_font = subtitle_font
                     self.legend_font = legend_font
 
                     loaded = True
@@ -487,7 +504,9 @@ class WallpaperRenderer:
             # -----------------------------------------------------------------------
             default_font = ImageFont.load_default()
             self.title_font = default_font
+            self.headline_font = default_font
             self.stats_font = default_font
+            self.subtitle_font = default_font
             self.legend_font = default_font
 
     def draw_title(self, text: str, y_position: float) -> None:
@@ -506,12 +525,25 @@ class WallpaperRenderer:
 
     def draw_subtitle(self, text: str, y_position: float) -> None:
         """Draw centered subtitle text"""
-        bbox = self.draw.textbbox((0, 0), text, font=self.stats_font)
+        bbox = self.draw.textbbox((0, 0), text, font=self.subtitle_font)
         text_width = bbox[2] - bbox[0]
         x = (self.width - text_width) / 2
-        self.draw.text((x, y_position), text, fill='#8a8a8a', font=self.stats_font)
+        self.draw.text((x, y_position), text, fill='#8a8a8a', font=self.subtitle_font)
 
-    def draw_grid(self, layout: GridLayout, total_units: int, filled_units: int) -> None:
+    def draw_headline_stat(self, text: str, y_position: float) -> None:
+        """Draw the primary stat line with stronger emphasis."""
+        bbox = self.draw.textbbox((0, 0), text, font=self.headline_font)
+        text_width = bbox[2] - bbox[0]
+        x = (self.width - text_width) / 2
+        self.draw.text((x, y_position), text, fill='#f2f2f2', font=self.headline_font)
+
+    def draw_grid(
+        self,
+        layout: GridLayout,
+        total_units: int,
+        filled_units: int,
+        current_progress: Optional[float] = None,
+    ) -> None:
         """Draw the calendar grid"""
         for i in range(total_units):
             x, y = layout.get_cell_position(i)
@@ -528,6 +560,20 @@ class WallpaperRenderer:
                 [x, y, x + layout.cell_size, y + layout.cell_size],
                 fill=color
             )
+
+            if filled_units < total_units and i == filled_units:
+                self.draw.rectangle(
+                    [x, y, x + layout.cell_size, y + layout.cell_size],
+                    outline='#ffdd00',
+                    width=2,
+                )
+                if current_progress is not None:
+                    progress_width = max(2, int(layout.cell_size * max(0.0, min(1.0, current_progress))))
+                    bar_top = y + layout.cell_size - max(3, layout.cell_size // 4)
+                    self.draw.rectangle(
+                        [x + 1, bar_top, x + progress_width, y + layout.cell_size],
+                        fill='#ffdd00',
+                    )
 
     def draw_legend(self, legend_items: List[Tuple[str, str]], y_position: float) -> None:
         """Draw legend"""
@@ -585,20 +631,7 @@ class WallpaperEngine:
         self.config = self.load_config()
 
     # Default config template for merging
-    DEFAULT_CONFIG = {
-        "mode": "life",
-        "dob": "",
-        "lifespan": 90,
-        "goal_start": "",
-        "goal_end": "",
-        "goal_title": "",
-        "goal_subtitle": "",
-        "resolution_width": 1920,
-        "resolution_height": 1080,
-        "config_version": 3,
-        "palette": {},
-        "opportunities": []
-    }
+    DEFAULT_CONFIG = merge_config()
 
     def load_config(self) -> dict:
         """Load configuration from file with defaults merge"""
@@ -606,10 +639,7 @@ class WallpaperEngine:
             if os.path.exists(self.config_file):
                 with open(self.config_file, 'r', encoding='utf-8') as f:
                     loaded = json.load(f)
-                # Merge with defaults to prevent KeyError on missing keys
-                merged = self.DEFAULT_CONFIG.copy()
-                merged.update(loaded)
-                return merged
+                return merge_config(loaded)
             else:
                 raise FileNotFoundError(f"Config file not found: {self.config_file}")
         except json.JSONDecodeError as e:
@@ -707,32 +737,42 @@ class WallpaperEngine:
             else:
                 raise ValueError(f"Unknown mode: {mode}")
 
-            total_units, filled_units, stats_text = calendar_data.calculate()
+            total_units, filled_units, _stats_text = calendar_data.calculate()
+            today_metrics = get_today_metrics(self.config)
 
             # Layout Layer
             layout = GridLayout(mode, total_units, width, height)
 
             # Rendering Layer
             renderer = WallpaperRenderer(width, height)
-            renderer.draw_title(calendar_data.get_title(), layout.start_y - 110)
+            renderer.draw_title(calendar_data.get_title(), layout.start_y - 140)
 
             # Draw subtitle if available (all calendars support it now)
             subtitle = calendar_data.get_subtitle()
+            stat_start_y = layout.start_y - 88
             if subtitle:
-                renderer.draw_subtitle(subtitle, layout.start_y - 75)
-                renderer.draw_stats(stats_text, layout.start_y - 45)
-            else:
-                renderer.draw_stats(stats_text, layout.start_y - 65)
+                renderer.draw_subtitle(subtitle, layout.start_y - 112)
+                stat_start_y = layout.start_y - 78
 
-            renderer.draw_grid(layout, total_units, filled_units)
+            renderer.draw_headline_stat(today_metrics.primary_line, stat_start_y)
+            renderer.draw_stats(today_metrics.secondary_lines[0], stat_start_y + 34)
+            renderer.draw_stats(today_metrics.secondary_lines[1], stat_start_y + 58)
+            renderer.draw_subtitle(today_metrics.emotional_line, stat_start_y + 86)
+
+            renderer.draw_grid(
+                layout,
+                total_units,
+                filled_units,
+                current_progress=today_metrics.week_progress if mode == 'life' else None,
+            )
             renderer.draw_legend(calendar_data.get_legend(), layout.start_y + layout.grid_height + 50)
             renderer.save(self.wallpaper_path)
 
             return True, f"Wallpaper generated: {self.wallpaper_path}"
 
-        except Exception:
-            logger.exception("Generation failed")
-            return False, "Generation failed"
+        except Exception as e:
+            logger.exception(f"Generation failed: {e}")
+            return False, f"Generation failed: {str(e)[:100]}"
 
     def set_wallpaper(self) -> Tuple[bool, str]:
         """Set the generated wallpaper with multi-OS support"""
@@ -748,9 +788,9 @@ class WallpaperEngine:
             else:
                 return False, f"Unsupported OS: {system}"
 
-        except Exception:
-            logger.exception("Failed to set wallpaper")
-            return False, "Failed to set wallpaper"
+        except Exception as e:
+            logger.exception(f"Failed to set wallpaper: {e}")
+            return False, f"Failed to set wallpaper: {str(e)[:100]}"
 
     def _set_windows_wallpaper(self) -> Tuple[bool, str]:
         """Set wallpaper on Windows with verification and broadcast refresh"""
@@ -778,8 +818,8 @@ class WallpaperEngine:
             ctypes.windll.user32.SendMessageTimeoutW(
                 HWND_BROADCAST, WM_SETTINGCHANGE, 0, 0, SMTO_ABORTIFHUNG, 5000, None
             )
-        except Exception:
-            pass  # Non-critical - wallpaper is still set
+        except Exception as e:
+            logger.debug(f"Could not broadcast wallpaper change notification: {e}")  # Non-critical
 
         return True, "Wallpaper set successfully"
 
@@ -815,9 +855,9 @@ class WallpaperEngine:
                 logger.error(f"osascript failed: {result.stderr.decode()}")
                 return False, "osascript failed"
 
-        except Exception:
-            logger.exception("Failed to set macOS wallpaper")
-            return False, "Failed to set macOS wallpaper"
+        except Exception as e:
+            logger.exception(f"Failed to set macOS wallpaper: {e}")
+            return False, f"Failed to set macOS wallpaper: {str(e)[:100]}"
 
         finally:
             # Clean up temp script
@@ -911,9 +951,9 @@ class WallpaperEngine:
                 logger.error(f"Wallpaper command '{command_used}' failed. DE: {desktop_env}")
                 return False, f"Wallpaper command '{command_used}' failed"
 
-        except Exception:
-            logger.exception("Failed to set wallpaper on Linux")
-            return False, "Failed to set wallpaper on Linux"
+        except Exception as e:
+            logger.exception(f"Failed to set wallpaper on Linux: {e}")
+            return False, f"Failed to set wallpaper on Linux: {str(e)[:100]}"
 
     def run_auto(self) -> bool:
         """Automated run - for scheduler (NO USER INTERACTION)"""
@@ -933,8 +973,8 @@ class WallpaperEngine:
             logger.info("Wallpaper updated successfully")
             return True
 
-        except Exception:
-            logger.exception("Auto run failed")
+        except Exception as e:
+            logger.exception(f"Auto run failed: {e}")
             return False
 
         finally:

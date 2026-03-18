@@ -35,9 +35,13 @@ def make_config(mode, **overrides):
         "goal_subtitle": "",
         "resolution_width": 1920,
         "resolution_height": 1080,
-        "config_version": 3,
+        "config_version": 4,
         "palette": {},
         "opportunities": [],
+        "automation": {
+            "startup_enabled": True,
+            "wallpaper_refresh_enabled": True,
+        },
     }
     cfg.update(overrides)
     return cfg
@@ -355,6 +359,7 @@ class TestConfigValidation:
         engine = WallpaperEngine(cfg_path)
         assert engine.config["resolution_width"] == 1920
         assert engine.config["lifespan"] == 90
+        assert engine.config["automation"]["startup_enabled"] is True
 
     def test_invalid_json_raises(self, temp_dir):
         cfg_path = temp_dir / "life_calendar_config.json"
