@@ -1,0 +1,11 @@
+version: "3.9"
+services:
+  life-calendar:
+    build: .
+    container_name: life-calendar
+    restart: unless-stopped
+    volumes:
+      # The host folder holds the config, log and generated PNG.
+      - ./config:/app/config
+    environment:
+      - TZ=America/New_York   # adjust to your timezone if needed
