@@ -22,7 +22,7 @@ jobs:
       run: pip install ruff
 
     - name: Lint with ruff
-      run: ruff check . --select E,F,W --output-format=github
+      run: ruff check . --select E,F,W --ignore E501 --output-format=github
 
   build-and-test:
     runs-on: ubuntu-latest

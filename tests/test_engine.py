@@ -9,7 +9,6 @@ import json
 import pytest
 from pathlib import Path
 from datetime import datetime, date, timedelta
-from unittest.mock import patch
 
 from wallpaper_engine import (
     WallpaperEngine,
@@ -17,7 +16,6 @@ from wallpaper_engine import (
     YearCalendarData,
     GoalCalendarData,
     GridLayout,
-    WallpaperRenderer,
     safe_date,
     MAX_CELL_SIZE,
 )
@@ -152,7 +150,7 @@ class TestYearCalendarData:
         ycd = YearCalendarData()
         legend = ycd.get_legend()
         assert len(legend) == 3
-        labels = [l for _, l in legend]
+        labels = [label for _, label in legend]
         assert "Today" in labels
 
 

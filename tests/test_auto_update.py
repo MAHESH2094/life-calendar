@@ -10,7 +10,7 @@ import json
 import pytest
 from pathlib import Path
 from datetime import date
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 

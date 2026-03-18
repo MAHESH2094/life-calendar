@@ -1,11 +1,10 @@
-[tool.ruff]
 line-length = 100
 target-version = "py311"
 exclude = [".venv", "dist", "build", "__pycache__"]
 
-[tool.ruff.lint]
+[lint]
 select = ["E", "F", "W"]
-ignore = ["E501"]  # line-too-long (handled by code review)
+ignore = ["E501"]
 
-[tool.ruff.lint.per-file-ignores]
-"tests/*" = ["F811"]  # allow test fixtures with same name
+[lint.per-file-ignores]
+"tests/*" = ["F811"]

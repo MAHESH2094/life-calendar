@@ -15,7 +15,6 @@ Output:
 
 import subprocess
 import shutil
-import os
 import sys
 from pathlib import Path
 
@@ -32,12 +31,12 @@ BUILD_DIR = BASE_DIR / "build"
 def cleanup():
     """Clean build artifacts BEFORE building"""
     print("[CLEAN] Removing old build artifacts...")
-    
+
     for dir_path in [BUILD_DIR, DIST_DIR]:
         if dir_path.exists():
             shutil.rmtree(dir_path)
             print(f"        Removed {dir_path.name}/")
-    
+
     for spec_file in BASE_DIR.glob("*.spec"):
         spec_file.unlink()
         print(f"        Removed {spec_file.name}")
@@ -46,9 +45,9 @@ def cleanup():
 def run_command(cmd: list, description: str) -> bool:
     """Run a command and return success status"""
     print(f"\n[BUILD] {description}")
-    
+
     try:
-        result = subprocess.run(cmd, check=True, capture_output=False)
+        subprocess.run(cmd, check=True, capture_output=False)
         print(f"[OK]    {description} - SUCCESS")
         return True
     except subprocess.CalledProcessError as e:
@@ -101,64 +100,64 @@ def verify_exes_exist():
     """Hard fail if EXEs are missing"""
     gui_exe = DIST_DIR / "LifeCalendar.exe"
     update_exe = DIST_DIR / "LifeCalendarUpdate.exe"
-    
+
     if not gui_exe.exists():
         raise RuntimeError(f"FATAL: GUI EXE not found: {gui_exe}")
-    
+
     if not update_exe.exists():
         raise RuntimeError(f"FATAL: Updater EXE not found: {update_exe}")
 
 
 def create_package():
     """Create the distribution package folder"""
-    print(f"\n[PACKAGE] Creating distribution package...")
-    
+    print("\n[PACKAGE] Creating distribution package...")
+
     # Verify EXEs exist before packaging
     try:
         verify_exes_exist()
     except RuntimeError as e:
         print(f"[FAIL]   {e}")
         raise
-    
+
     # Clean and create output directory
     if OUTPUT_DIR.exists():
         shutil.rmtree(OUTPUT_DIR)
     OUTPUT_DIR.mkdir(parents=True)
-    
+
     # Copy EXE files
     gui_exe = DIST_DIR / "LifeCalendar.exe"
     update_exe = DIST_DIR / "LifeCalendarUpdate.exe"
-    
+
     shutil.copy(gui_exe, OUTPUT_DIR)
-    print(f"[OK]     Copied LifeCalendar.exe")
-    
+    print("[OK]     Copied LifeCalendar.exe")
+
     shutil.copy(update_exe, OUTPUT_DIR)
-    print(f"[OK]     Copied LifeCalendarUpdate.exe")
-    
+    print("[OK]     Copied LifeCalendarUpdate.exe")
+
     # Copy config file
     config_file = BASE_DIR / "life_calendar_config.json"
     if config_file.exists():
         shutil.copy(config_file, OUTPUT_DIR)
-        print(f"[OK]     Copied life_calendar_config.json")
-    
+        print("[OK]     Copied life_calendar_config.json")
+
     # Copy README
     readme_file = BASE_DIR / "README.txt"
     if readme_file.exists():
         shutil.copy(readme_file, OUTPUT_DIR)
-        print(f"[OK]     Copied README.txt")
-    
+        print("[OK]     Copied README.txt")
+
     print(f"[OK]     Package created: {OUTPUT_DIR}")
 
 
 def cleanup_after():
     """Clean up build artifacts AFTER packaging"""
-    print(f"\n[CLEAN]  Cleaning up build artifacts...")
-    
+    print("\n[CLEAN]  Cleaning up build artifacts...")
+
     for dir_path in [BUILD_DIR, DIST_DIR]:
         if dir_path.exists():
             shutil.rmtree(dir_path)
             print(f"         Removed {dir_path.name}/")
-    
+
     for spec_file in BASE_DIR.glob("*.spec"):
         spec_file.unlink()
         print(f"         Removed {spec_file.name}")
@@ -172,7 +171,7 @@ def main():
 
 This script creates standalone EXE files for distribution
 """)
-    
+
     # Check PyInstaller
     try:
         import PyInstaller
@@ -181,26 +180,26 @@ This script creates standalone EXE files for distribution
         print("[FAIL]   PyInstaller not installed!")
         print("         Run: pip install pyinstaller")
         sys.exit(1)
-    
+
     try:
         # Clean BEFORE building
         cleanup()
-        
+
         # Build both EXEs
         gui_success = build_gui()
         if not gui_success:
             raise RuntimeError("GUI build failed")
-        
+
         update_success = build_updater()
         if not update_success:
             raise RuntimeError("Updater build failed")
-        
+
         # Package EXEs
         create_package()
-        
+
         # Clean AFTER packaging
         cleanup_after()
-        
+
         print(f"""
 ========================================================
                   BUILD COMPLETE!
@@ -218,7 +217,7 @@ Ready to distribute!
 
 ========================================================
 """)
-        
+
     except Exception as e:
         print(f"\n[FAIL]   Build failed: {e}")
         sys.exit(1)

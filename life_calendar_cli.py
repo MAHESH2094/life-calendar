@@ -7,14 +7,13 @@ Simple command-line helper that:
 * optionally installs a nightly cron job (Linux/macOS) or a Windows task.
 """
 
-import os
 import sys
 import json
 import subprocess
 import platform
 import shlex
 from pathlib import Path
-from wallpaper_engine import WallpaperEngine, LOG_PATH
+from wallpaper_engine import WallpaperEngine
 
 BASE_DIR = Path(__file__).parent.absolute()
 CONFIG_PATH = BASE_DIR / "life_calendar_config.json"
@@ -39,7 +38,7 @@ def _run_once():
     ok, msg = engine.run_auto()
     print(msg)
     if ok:
-        print(f"✓ Wallpaper generated successfully.")
+        print("✓ Wallpaper generated successfully.")
     sys.exit(0 if ok else 1)
 
 
@@ -48,24 +47,24 @@ def _install_cron(cron_time: str = "1 0 * * *"):
     if platform.system() == "Windows":
         print("ERROR: Cron is not used on Windows – use --install-win instead.")
         sys.exit(1)
-    
+
     wrapper = BASE_DIR / "cron_wrapper.sh"
     if not wrapper.exists():
         print(f"ERROR: {wrapper} not found. Please ensure cron_wrapper.sh is in the repo.")
         sys.exit(1)
-    
+
     cron_line = f"{cron_time} {shlex.quote(str(wrapper))} >> {BASE_DIR}/cron.log 2>&1"
-    
+
     # Check if already installed
     try:
         existing = subprocess.check_output(["crontab", "-l"], stderr=subprocess.DEVNULL).decode()
     except subprocess.CalledProcessError:
         existing = ""
-    
+
     if cron_line in existing:
         print("✓ Cron job already installed.")
         return
-    
+
     # Add the new cron line
     new_tab = existing + ("\n" if existing else "") + cron_line + "\n"
     try:
@@ -91,14 +90,14 @@ def _install_windows_task():
     if platform.system() != "Windows":
         print("ERROR: Windows task creation only works on Windows.")
         sys.exit(1)
-    
+
     # Try to find the EXE (built by build_exe.py)
     exe_path = BASE_DIR / "LifeCalendar_Package" / "LifeCalendarUpdate.exe"
     if not exe_path.exists():
         # Fallback to Python script
         exe_path = str(BASE_DIR / "auto_update.py")
         print(f"⚠ EXE not found, using Python script: {exe_path}")
-    
+
     # Create task via schtasks (requires admin on Windows 7+)
     cmd = [
         "schtasks", "/Create",
@@ -108,7 +107,7 @@ def _install_windows_task():
         "/ST", "00:01",
         "/F"
     ]
-    
+
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         if result.returncode == 0:
@@ -134,16 +133,16 @@ def _install_launchd(schedule_time: str = "0 1 * * *"):
     if platform.system() != "Darwin":
         print("ERROR: launchd creation only works on macOS.")
         sys.exit(1)
-    
+
     import plistlib
-    
+
     # Parse cron schedule to launchd format (simplified for common schedules)
     # We'll use a simple interval-based approach for now
     plist_path = Path.home() / "Library" / "LaunchAgents" / "com.lifecalendar.wallpaper.plist"
-    
+
     # Ensure LaunchAgents directory exists
     plist_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     # Create plist structure
     plist_dict = {
         "Label": "com.lifecalendar.wallpaper",
@@ -157,11 +156,11 @@ def _install_launchd(schedule_time: str = "0 1 * * *"):
         "StandardErrorPath": str(BASE_DIR / "launchd.log"),
         "RunAtLoad": False,
     }
-    
+
     # Write plist
     try:
         plist_path.write_bytes(plistlib.dumps(plist_dict))
-        
+
         # Load the plist
         result = subprocess.run(
             ["launchctl", "load", str(plist_path)],
@@ -169,7 +168,7 @@ def _install_launchd(schedule_time: str = "0 1 * * *"):
             text=True,
             timeout=5
         )
-        
+
         if result.returncode == 0 or "already loaded" in result.stderr:
             print("✓ macOS LaunchAgent created and loaded.")
             print(f"   Plist location: {plist_path}")
@@ -185,7 +184,7 @@ def _install_launchd(schedule_time: str = "0 1 * * *"):
 def main():
     """Main CLI entry point"""
     import argparse
-    
+
     parser = argparse.ArgumentParser(
         description="Life Calendar - Setup & Management Helper",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -198,7 +197,7 @@ Examples:
   python life_calendar_cli.py --install-win           # Install Task Scheduler entry (Windows)
         """
     )
-    
+
     parser.add_argument(
         "--install-cron",
         action="store_true",
@@ -225,12 +224,12 @@ Examples:
         action="store_true",
         help="Generate & set wallpaper once and exit"
     )
-    
+
     args = parser.parse_args()
-    
+
     # Ensure config exists first
     _ensure_config()
-    
+
     # Execute the requested action
     if args.install_cron:
         _install_cron(args.cron_time)
