@@ -6,6 +6,7 @@ services:
     restart: unless-stopped
     volumes:
       # The host folder holds the config, log and generated PNG.
-      - ./config:/app/config
+      # Use ./data for persistent storage across container rebuilds.
+      - ./data:/app
     environment:
       - TZ=America/New_York   # adjust to your timezone if needed

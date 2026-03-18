@@ -595,7 +595,9 @@ class WallpaperEngine:
         "goal_subtitle": "",
         "resolution_width": 1920,
         "resolution_height": 1080,
-        "config_version": 2
+        "config_version": 3,
+        "palette": {},
+        "opportunities": []
     }
     
     def load_config(self) -> dict:

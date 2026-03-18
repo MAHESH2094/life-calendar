@@ -11,6 +11,8 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY . /app
 
-# The container will run the headless updater forever
-# (it sleeps until the next midnight internally)
-CMD ["python", "auto_update.py"]
+# The container will continuously run the updater.
+# The auto_update script only generates a wallpaper when the date has changed,
+# so running it frequently has minimal overhead. This keeps the container alive
+# and ensures responsive updates even if dates change during container uptime.
+CMD ["bash","-c","while true; do python auto_update.py; sleep 60; done"]

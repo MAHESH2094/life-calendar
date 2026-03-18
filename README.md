@@ -1,5 +1,7 @@
 # Life Calendar Wallpaper
 
+![CI](https://github.com/MAHESH2094/life-calendar/actions/workflows/ci.yml/badge.svg)
+
 A production-grade desktop wallpaper generator that visualizes life, year, or goal progress.
 Built to be scheduler-safe, crash-resilient, and uninstall-clean.
 
@@ -29,9 +31,81 @@ Built to be scheduler-safe, crash-resilient, and uninstall-clean.
 
 ## Quick start
 
-### How It Works
+### Windows
+
+**Option A: Pre-built EXE (recommended for non-technical users)**
+1. Download `LifeCalendar.exe` from the latest [GitHub Release](https://github.com/MAHESH2094/life-calendar/releases)
+2. Double-click to run – the GUI opens automatically
+3. Fill in your date of birth, lifespan, and resolution
+4. Press **Enter** (or click the button) – your wallpaper changes immediately
+5. A Windows Task Scheduler entry is created automatically – the wallpaper updates at midnight every night
+
+**Option B: From source**
+```bash
+pip install -r requirements.txt
 python life_calendar_gui.py
+python life_calendar_cli.py --install-win
 ```
+
+### macOS / Linux (From source)
+
+```bash
+pip install -r requirements.txt
+python life_calendar_gui.py          # Configure once (GUI opens)
+python life_calendar_cli.py --install-cron    # Auto-update nightly via cron
+```
+
+The cron job runs at 00:01 am every night. Check `cron.log` if it doesn't work.
+
+### macOS / Linux (Docker – zero dependencies)
+
+```bash
+# One-command deployment
+docker compose up -d
+
+# Set your configuration
+nano data/life_calendar_config.json
+
+# Restart to apply changes
+docker compose restart
+
+# The container updates the wallpaper nightly automatically
+```
+
+The generated wallpaper appears in `./data/life_calendar_wallpaper.png`. You can set it as your desktop background manually or create a simple script that copies it.
+
+### How It Works
+
+1. **Configure once** via GUI or JSON file (set date of birth, lifespan, resolution)
+2. **Generate** – creates `life_calendar_wallpaper.png` 
+3. **Set wallpaper** – updates your desktop background
+4. **Schedule** – automatic nightly updates via Task Scheduler (Windows), cron (Linux/macOS), or Docker
+
+---
+
+## 🖥️ CLI Helper (all platforms)
+
+For non-GUI users or automation:
+
+```bash
+# Generate and set wallpaper once
+python life_calendar_cli.py --run-once
+
+# Install automatic nightly updates (Linux/macOS only)
+python life_calendar_cli.py --install-cron
+
+# Install Windows Task Scheduler entry
+python life_calendar_cli.py --install-win
+
+# Show all options
+python life_calendar_cli.py --help
+```
+
+The CLI automatically creates a default `life_calendar_config.json` if none exists.
+
+---
+
+## 🔨 For Developers
 
 ### Upgrading from v1
 
@@ -53,7 +127,9 @@ Output: `LifeCalendar_Package/LifeCalendar.exe` (GUI) and `LifeCalendarUpdate.ex
 
 ## 🔧 Configuration
 
-Edit `life_calendar_config.json` directly or use the GUI:
+Edit `life_calendar_config.json` directly or use the GUI to set your dates and resolution.
+
+### Basic configuration
 
 ```json
 {
@@ -61,9 +137,56 @@ Edit `life_calendar_config.json` directly or use the GUI:
   "dob": "1990-01-15",
   "lifespan": 90,
   "resolution_width": 1920,
-  "resolution_height": 1080
+  "resolution_height": 1080,
+  "config_version": 3
 }
 ```
+
+### Advanced configuration (custom colours and life milestones)
+
+```json
+{
+  "mode": "life",
+  "dob": "1990-01-15",
+  "lifespan": 90,
+  "resolution_width": 1920,
+  "resolution_height": 1080,
+  "config_version": 3,
+  "palette": {
+    "background": "#050505",
+    "title": "#f2f2f2",
+    "stats": "#9a9a9a",
+    "passed": "#cfcfcf",
+    "current": "#ffffff",
+    "future": "#3a3a3a",
+    "current_highlight": "#ffdd00"
+  },
+  "opportunities": [
+    {
+      "name": "Warm Winters",
+      "start": "2024-11-01",
+      "end": "2025-02-28",
+      "color": "#ff7f7f",
+      "visible": true,
+      "focus": false
+    },
+    {
+      "name": "Dog-walk Season",
+      "start": "2024-03-01",
+      "end": "2024-05-31",
+      "color": "#7fff7f",
+      "visible": false,
+      "focus": false
+    }
+  ]
+}
+```
+
+**Notes:**
+- Use YYYY-MM-DD format for all dates
+- Colours are hex codes (e.g., `#ffffff` for white, `#000000` for black)
+- Set `"visible": false` to hide an opportunity from the wallpaper
+- Set `"focus": true` to highlight one opportunity with the `current_highlight` color
 
 ---
 
@@ -71,15 +194,23 @@ Edit `life_calendar_config.json` directly or use the GUI:
 
 ### Wallpaper not updating?
 
-Check `wallpaper.log` in the same folder as the EXE for detailed error messages.
+Check `wallpaper.log` in the same folder as the config for detailed error messages.
 
-### Task didn't auto-create?
+### Windows: Task didn't auto-create?
 
-Import `LifeCalendar_Task.xml` into Task Scheduler, or set up manually via `taskschd.msc`.
+The GUI automatically creates a Windows Task Scheduler entry when you press **Enter**. If it didn't work, you can manually recreate it:
 
-### Linux: Wallpaper not changing?
+```bash
+python life_calendar_cli.py --install-win    # Requires admin privileges
+```
 
-Check `wallpaper.log` - different desktop environments need different commands. File an issue with your DE name.
+Or via the manual Task Scheduler GUI:
+1. Open Task Scheduler (press `Win+R`, type `taskschd.msc`)
+2. Import `LifeCalendar_Task.xml`, or create a new task to run `LifeCalendarUpdate.exe` daily at 00:01
+
+### Linux/macOS: Wallpaper not changing?
+
+Check `wallpaper.log` – different desktop environments need different commands. File an issue with your desktop environment name if it doesn't work.
 
 ---
 
