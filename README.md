@@ -4,6 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub release](https://img.shields.io/github/v/release/MAHESH2094/life-calendar)](https://github.com/MAHESH2094/life-calendar/releases)
 [![codecov](https://codecov.io/gh/MAHESH2094/life-calendar/graph/badge.svg)](https://codecov.io/gh/MAHESH2094/life-calendar)
+[![Docker Pulls](https://img.shields.io/docker/pulls/mahesh2094/life-calendar?style=flat)](https://hub.docker.com/r/mahesh2094/life-calendar)
 
 A production-grade desktop wallpaper generator that visualizes life, year, or goal progress.
 Built to be scheduler-safe, crash-resilient, and uninstall-clean.
@@ -76,6 +77,23 @@ docker compose restart
 ```
 
 The generated wallpaper appears in `./data/life_calendar_wallpaper.png`. You can set it as your desktop background manually or create a simple script that copies it.
+
+## Uninstall
+
+To completely remove Life Calendar and all scheduled tasks:
+
+### Windows
+```bash
+python uninstall.py
+```
+
+### macOS / Linux
+```bash
+python uninstall.py
+crontab -e  # Remove the life-calendar entry if needed
+```
+
+After uninstalling, your wallpaper settings and generated images are removed. The Windows Task Scheduler entry and macOS LaunchAgent are automatically cleaned up.
 
 ### How It Works
 

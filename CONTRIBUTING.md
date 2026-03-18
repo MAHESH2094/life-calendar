@@ -36,6 +36,12 @@ ruff check . --select E,F,W
 ## Code Style
 
 - We use **ruff** for linting (rules: E, F, W)
+- **Before submitting a PR**, run `ruff check .` locally and fix any errors
+  ```bash
+  ruff check . --select E,F,W  # Shows all issues
+  ruff check . --fix            # Auto-fixes common issues
+  ```
+- The CI pipeline enforces ruff checks – PRs with lint errors will fail
 - Keep functions focused and well-documented
 - Use type hints where possible
 - Follow the existing architecture: Engine (headless) → GUI (optional) → CLI (helper)

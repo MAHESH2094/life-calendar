@@ -1,11 +1,22 @@
 """
 Life Calendar Uninstall Script
-Removes scheduled task, lock file, wallpaper, and logs.
+
+Completely removes the Life Calendar application and all associated files.
+
+What it removes:
+  • Windows Task Scheduler entry (if installed)
+  • macOS LaunchAgent plist (if installed)
+  • Generated wallpaper files
+  • Log files and temporary files
+  • Lock files and state
 
 Usage:
   python uninstall.py
   
 Or double-click uninstall_LifeCalendar.bat (Windows)
+
+After running this script, all Life Calendar scheduled tasks are removed.
+Manual cron removal on Linux/macOS: run `crontab -e` and delete the Life Calendar entry.
 """
 
 import os
