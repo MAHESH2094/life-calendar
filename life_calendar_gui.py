@@ -1182,7 +1182,11 @@ class LifeCalendarGUI:
 
         # Format errors for display
         error_details = "\n".join(f"• {error}" for error in errors)
-        self.automation_warning = f"Automation setup encountered issues:\n{error_details}"
+        self.automation_warning = (
+            "Automation setup encountered issues. "
+            "If you see access denied, run Life Calendar as Administrator and retry."
+            f"\n{error_details}"
+        )
         self.update_automation_status()
         self.set_status("Automation setup failed - check retry button.", warning=True)
 

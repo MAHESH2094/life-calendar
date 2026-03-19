@@ -2,12 +2,9 @@
 Tests for edge-case robustness fixes (C1-C5)
 """
 
-import os
 import sys
-import pytest
 import re
 from pathlib import Path
-from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -42,15 +39,14 @@ class TestNonNumericPIDHandling:
     def test_corrupted_pid_format(self, tmp_path):
         """Non-numeric PID should be treated as corrupted"""
         lock_file = tmp_path / ".test.lock"
-        
+
         # Write garbage PID
         lock_file.write_text("not_a_number")
-        
+
         # Try to read and parse
+        pid_str = lock_file.read_text().strip()
         try:
-            pid_str = lock_file.read_text().strip()
-            pid = int(pid_str)
-            # Should not reach here
+            int(pid_str)
             assert False, "Should have raised ValueError"
         except ValueError:
             # Expected - corrupted PID
@@ -63,15 +59,15 @@ class TestShutilMoveFallback:
     def test_os_replace_equivalence(self, tmp_path):
         """Verify shutil.move works as fallback for os.replace"""
         import shutil
-        
+
         source = tmp_path / "source.txt"
         dest = tmp_path / "dest.txt"
-        
+
         source.write_text("test content")
-        
+
         # shutil.move should work as fallback
         shutil.move(str(source), str(dest))
-        
+
         assert dest.exists()
         assert not source.exists()
         assert dest.read_text() == "test content"
@@ -79,16 +75,16 @@ class TestShutilMoveFallback:
     def test_os_replace_with_existing_dest(self, tmp_path):
         """Verify shutil.move overwrites destination like os.replace"""
         import shutil
-        
+
         source = tmp_path / "source.txt"
         dest = tmp_path / "dest.txt"
-        
+
         source.write_text("new content")
         dest.write_text("old content")
-        
+
         # shutil.move should overwrite
         shutil.move(str(source), str(dest))
-        
+
         assert dest.exists()
         assert not source.exists()
         assert dest.read_text() == "new content"

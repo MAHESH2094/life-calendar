@@ -141,12 +141,12 @@ def mark_updated() -> None:
 def main(argv: Optional[list[str]] = None) -> int:
     """
     Main entry point for auto-update.
-    Returns exit code (0 = success, 1 = failure).
-    
+        Returns exit code (0 = success, 1 = failure).
+
     Args:
         argv: Optional list of command-line arguments (for testing).
               If None, uses sys.argv[1:].
-    
+
     Usage:
       python auto_update.py              # Normal: generate and set wallpaper
       python auto_update.py --dry-run    # D6: Test without making changes
@@ -162,7 +162,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="Test wallpaper generation without actually setting it"
     )
     args = parser.parse_args(argv)
-    
+
     # Force correct working directory (critical for Task Scheduler)
     # Only do this once in main()
     try:
@@ -231,7 +231,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         # Create engine and run
         logger.info("Generating wallpaper...")
         engine = WallpaperEngine(str(config_file))
-        
+
         if args.dry_run:
             # D6: Test mode - generate but don't set or mark as updated
             try:
