@@ -51,7 +51,17 @@ python life_calendar_gui.py
 python life_calendar_cli.py --install-win
 ```
 
-### macOS / Linux (From source)
+### macOS (From source)
+
+```bash
+pip install -r requirements.txt
+python life_calendar_gui.py                    # Configure once (GUI opens)
+python life_calendar_cli.py --install-launchd  # Auto-update nightly via LaunchAgent
+```
+
+LaunchAgent runs at 00:01 am every night and logs to `wallpaper.log`.
+
+### Linux (From source)
 
 ```bash
 pip install -r requirements.txt
@@ -167,7 +177,30 @@ Edit `life_calendar_config.json` directly or use the GUI to set your dates and r
 }
 ```
 
-### Advanced configuration (custom colours and life milestones)
+## 🎨 Customizing Colors
+
+You can customize all wallpaper colors by editing the `palette` section in `life_calendar_config.json`:
+
+```json
+{
+  "palette": {
+    "title": "#f2f2f2",           // Main title text
+    "stats": "#9a9a9a",           // Statistics text
+    "subtitle": "#8a8a8a",        // Subtitle text
+    "legend": "#d6d6d6",          // Legend labels
+    "lived": "#cfcfcf",           // Completed units
+    "current": "#ffffff",         // Current unit
+    "future": "#3a3a3a",          // Future units
+    "current_progress": "#ffdd00"  // Progress highlight
+  }
+}
+```
+
+All colors use **hex format** (e.g., `#ffffff` = white, `#000000` = black). After editing, restart the application to see the changes reflected in the next wallpaper update.
+
+---
+
+## 🎨 Advanced configuration (custom colours and life milestones)
 
 ```json
 {

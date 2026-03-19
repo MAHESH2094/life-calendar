@@ -895,8 +895,8 @@ class WallpaperEngine:
         de = os.environ.get('XDG_CURRENT_DESKTOP', '').lower()
         session = os.environ.get('DESKTOP_SESSION', '').lower()
 
-        # Combine for better detection
-        desktop_env = de + session
+        # Use whichever is available, preferring XDG_CURRENT_DESKTOP
+        desktop_env = (de or session).lower()
 
         if desktop_env:
             logger.info(f"Detected Linux desktop: XDG_CURRENT_DESKTOP={os.environ.get('XDG_CURRENT_DESKTOP', 'unknown')}, DESKTOP_SESSION={os.environ.get('DESKTOP_SESSION', 'unknown')}")
