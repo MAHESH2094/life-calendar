@@ -112,7 +112,7 @@ def acquire_lock() -> None:
         try:
             with open(LOCK_FILE, 'r') as f:
                 pid_str = f.read().strip()
-            
+
             # C1: Safely parse PID; treat non-numeric as corrupted
             try:
                 old_pid = int(pid_str)
@@ -120,7 +120,7 @@ def acquire_lock() -> None:
                 logger.debug(f"Corrupted lock file (non-numeric PID: {pid_str}), removing")
                 os.remove(LOCK_FILE)
                 old_pid = None
-            
+
             if old_pid is not None:
                 # Check if old process is still running
                 if _is_process_running(old_pid):
