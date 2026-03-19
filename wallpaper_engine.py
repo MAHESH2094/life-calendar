@@ -12,6 +12,7 @@ import sys
 import platform
 import ctypes
 import calendar
+import time
 from abc import ABC, abstractmethod
 import logging
 from logging.handlers import RotatingFileHandler
@@ -116,9 +117,13 @@ def acquire_lock() -> None:
             if _is_process_running(old_pid):
                 raise RuntimeError(f"Another LifeCalendar process is already running (PID: {old_pid})")
             else:
-                # Stale lock - remove it
-                logger.warning(f"Removing stale lock from dead process (PID: {old_pid})")
-                os.remove(LOCK_FILE)
+                # Stale lock - check age; if >2 hours old, remove it
+                lock_age = time.time() - os.path.getmtime(LOCK_FILE)
+                if lock_age > 7200:  # 2 hours
+                    logger.warning(f"Removing stale lock from dead process (PID: {old_pid}, age: {lock_age/3600:.1f}h)")
+                    os.remove(LOCK_FILE)
+                else:
+                    raise RuntimeError(f"Lock file present but process {old_pid} is dead (lock age: {lock_age/60:.0f}m). Possible concurrent run or recent crash.")
         except (ValueError, IOError):
             # Corrupted lock file - remove it
             try:
@@ -446,6 +451,17 @@ class WallpaperRenderer:
         self.img = Image.new('RGB', (width, height), color='#050505')
         self.draw = ImageDraw.Draw(self.img)
 
+        # Load palette colors from config with fallbacks
+        palette = self.config.get("palette", {})
+        self.title_color = palette.get("title", "#f2f2f2")
+        self.stats_color = palette.get("stats", "#9a9a9a")
+        self.subtitle_color = palette.get("subtitle", "#8a8a8a")
+        self.legend_color = palette.get("legend", "#d6d6d6")
+        self.passed_color = palette.get("lived", "#cfcfcf")
+        self.current_color = palette.get("current", "#ffffff")
+        self.future_color = palette.get("future", "#3a3a3a")
+        self.highlight_color = palette.get("current_progress", "#ffdd00")
+
         self._load_fonts()
 
     def _load_fonts(self) -> None:
@@ -518,28 +534,28 @@ class WallpaperRenderer:
         bbox = self.draw.textbbox((0, 0), text, font=self.title_font)
         text_width = bbox[2] - bbox[0]
         x = (self.width - text_width) / 2
-        self.draw.text((x, y_position), text, fill='#f2f2f2', font=self.title_font)
+        self.draw.text((x, y_position), text, fill=self.title_color, font=self.title_font)
 
     def draw_stats(self, text: str, y_position: float) -> None:
         """Draw centered stats text"""
         bbox = self.draw.textbbox((0, 0), text, font=self.stats_font)
         text_width = bbox[2] - bbox[0]
         x = (self.width - text_width) / 2
-        self.draw.text((x, y_position), text, fill='#9a9a9a', font=self.stats_font)
+        self.draw.text((x, y_position), text, fill=self.stats_color, font=self.stats_font)
 
     def draw_subtitle(self, text: str, y_position: float) -> None:
         """Draw centered subtitle text"""
         bbox = self.draw.textbbox((0, 0), text, font=self.subtitle_font)
         text_width = bbox[2] - bbox[0]
         x = (self.width - text_width) / 2
-        self.draw.text((x, y_position), text, fill='#8a8a8a', font=self.subtitle_font)
+        self.draw.text((x, y_position), text, fill=self.subtitle_color, font=self.subtitle_font)
 
     def draw_headline_stat(self, text: str, y_position: float) -> None:
         """Draw the primary stat line with stronger emphasis."""
         bbox = self.draw.textbbox((0, 0), text, font=self.headline_font)
         text_width = bbox[2] - bbox[0]
         x = (self.width - text_width) / 2
-        self.draw.text((x, y_position), text, fill='#f2f2f2', font=self.headline_font)
+        self.draw.text((x, y_position), text, fill=self.title_color, font=self.headline_font)
 
     def draw_grid(
         self,
@@ -549,23 +565,17 @@ class WallpaperRenderer:
         current_progress: Optional[float] = None,
     ) -> None:
         """Draw the calendar grid using colors from config palette"""
-        # Get colors from config palette with fallback defaults
-        palette = self.config.get("palette", {})
-        color_lived = palette.get("lived", "#cfcfcf")
-        color_current = palette.get("current", "#ffffff")
-        color_future = palette.get("future", "#3a3a3a")
-        color_progress = palette.get("current_progress", "#ffdd00")
-
+        # Use palette colors loaded in __init__
         for i in range(total_units):
             x, y = layout.get_cell_position(i)
 
             # Determine color - prevent index out of bounds
             if i < filled_units:
-                color = color_lived  # Passed/Lived
+                color = self.passed_color  # Passed/Lived
             elif filled_units < total_units and i == filled_units:
-                color = color_current  # Current
+                color = self.current_color  # Current
             else:
-                color = color_future  # Future
+                color = self.future_color  # Future
 
             self.draw.rectangle(
                 [x, y, x + layout.cell_size, y + layout.cell_size],
@@ -575,7 +585,7 @@ class WallpaperRenderer:
             if filled_units < total_units and i == filled_units:
                 self.draw.rectangle(
                     [x, y, x + layout.cell_size, y + layout.cell_size],
-                    outline=color_progress,
+                    outline=self.highlight_color,
                     width=2,
                 )
                 if current_progress is not None:
@@ -583,7 +593,7 @@ class WallpaperRenderer:
                     bar_top = y + layout.cell_size - max(3, layout.cell_size // 4)
                     self.draw.rectangle(
                         [x + 1, bar_top, x + progress_width, y + layout.cell_size],
-                        fill=color_progress,
+                        fill=self.highlight_color,
                     )
 
     def draw_legend(self, legend_items: List[Tuple[str, str]], y_position: float) -> None:
@@ -599,7 +609,7 @@ class WallpaperRenderer:
             self.draw.rectangle([x, y_position, x + 15, y_position + 15], fill=color)
 
             # Draw label
-            self.draw.text((x + 25, y_position), label, fill='#d6d6d6', font=self.legend_font)
+            self.draw.text((x + 25, y_position), label, fill=self.legend_color, font=self.legend_font)
 
     def save(self, path: str) -> None:
         """Save the image with atomic write to prevent corruption"""

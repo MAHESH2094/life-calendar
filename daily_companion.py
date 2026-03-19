@@ -28,7 +28,11 @@ DEFAULT_CONFIG = {
     "grid_cell_size": 20,
     "max_note_length": 120,
     "palette": {
-        "lived": "#cfcfcf",      # Passed/Lived cells
+        "title": "#f2f2f2",       # Main title and headline
+        "stats": "#9a9a9a",       # Stats/secondary text
+        "subtitle": "#8a8a8a",    # Subtitle text
+        "legend": "#d6d6d6",      # Legend labels
+        "lived": "#cfcfcf",       # Passed/Lived cells
         "current": "#ffffff",     # Current cell
         "future": "#3a3a3a",      # Future cells
         "current_progress": "#ffdd00"  # Current progress bar

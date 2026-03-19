@@ -85,10 +85,10 @@ def resolve_task_action(mode_flag: str, base_dir: Optional[str | Path] = None) -
     target_dir = Path(base_dir) if base_dir else Path(__file__).resolve().parent
 
     if getattr(sys, "frozen", False):
-        # Frozen exe - quote the exe path to handle spaces
+        # Frozen exe - quote the exe path and arguments to handle spaces
         exe_path = str(Path(sys.executable))
         command = f'"{exe_path}"'
-        arguments = mode_flag
+        arguments = f'"{mode_flag}"'
         working_dir = str(Path(sys.executable).resolve().parent)
     else:
         # Python script - quote both the interpreter and script path

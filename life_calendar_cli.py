@@ -47,6 +47,9 @@ def _install_cron(cron_time: str = "1 0 * * *") -> None:
     cron_line = f"{cron_time} {shlex.quote(str(wrapper))} >> {BASE_DIR}/cron.log 2>&1"
     try:
         existing = subprocess.check_output(["crontab", "-l"], stderr=subprocess.DEVNULL).decode()
+    except FileNotFoundError:
+        print("ERROR: crontab command not found – install cron on this system.")
+        sys.exit(1)
     except subprocess.CalledProcessError:
         existing = ""
 
