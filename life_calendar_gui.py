@@ -57,6 +57,23 @@ BASE_DIR = get_base_dir()
 class LifeCalendarGUI:
     """Tkinter GUI for the daily companion experience."""
 
+    # D2: Centralized UI color constants - easy to maintain light/dark themes
+    COLORS = {
+        "bg_primary": "#050505",      # Main background (near black)
+        "bg_secondary": "#101010",    # Card/container background
+        "bg_tertiary": "#141414",     # Panel background
+        "bg_nav": "#050505",          # Navigation bar
+        "bg_nav_active": "#1f2d21",   # Active nav button (dark green)
+        "bg_nav_inactive": "#151515", # Inactive nav area
+        "text_primary": "#f2f2f2",    # Main text
+        "text_secondary": "#a0a0a0",  # Secondary text
+        "text_muted": "#6a6a6a",      # Muted/disabled text
+        "border": "#2a2a2a",          # Borders
+        "accent_success": "#4caf50",  # Success (green)
+        "accent_warning": "#ff9800",  # Warning (orange)
+        "accent_error": "#f44336",    # Error (red)
+    }
+
     RESOLUTION_PRESETS = {
         "1920x1080 (Full HD)": (1920, 1080),
         "2560x1440 (2K QHD)": (2560, 1440),
@@ -76,7 +93,7 @@ class LifeCalendarGUI:
         self.root = tk.Tk()
         self.root.title("Life Calendar Daily Companion")
         self.root.minsize(700, 820)
-        self.root.configure(bg="#050505")
+        self.root.configure(bg=self.COLORS["bg_primary"])
         self.root.resizable(True, True)
 
         self.force_today = force_today
@@ -127,8 +144,8 @@ class LifeCalendarGUI:
             self.root,
             text="Life Calendar",
             font=("Arial", 28, "bold"),
-            bg="#050505",
-            fg="#f2f2f2",
+            bg=self.COLORS["bg_primary"],
+            fg=self.COLORS["text_primary"],
         )
         title.pack(pady=(18, 6))
 
@@ -136,19 +153,19 @@ class LifeCalendarGUI:
             self.root,
             text="A daily reminder that time is finite.",
             font=("Arial", 11),
-            bg="#050505",
-            fg="#9a9a9a",
+            bg=self.COLORS["bg_primary"],
+            fg=self.COLORS["text_secondary"],
         )
         subtitle.pack(pady=(0, 18))
 
-        nav_frame = tk.Frame(self.root, bg="#050505")
+        nav_frame = tk.Frame(self.root, bg=self.COLORS["bg_nav"])
         nav_frame.pack(fill="x", padx=28)
 
         self.today_nav_btn = tk.Button(
             nav_frame,
             text="Today",
             font=("Arial", 10, "bold"),
-            bg="#1f2d21",
+            bg=self.COLORS["bg_nav_active"],
             fg="#dff4e0",
             activebackground="#243526",
             relief="flat",
@@ -164,8 +181,8 @@ class LifeCalendarGUI:
             nav_frame,
             text="Settings",
             font=("Arial", 10),
-            bg="#151515",
-            fg="#c9c9c9",
+            bg=self.COLORS["bg_nav_inactive"],
+            fg=self.COLORS["text_secondary"],
             activebackground="#1d1d1d",
             relief="flat",
             bd=0,
@@ -176,11 +193,11 @@ class LifeCalendarGUI:
         )
         self.settings_nav_btn.pack(side="left")
 
-        self.content_frame = tk.Frame(self.root, bg="#050505")
+        self.content_frame = tk.Frame(self.root, bg=self.COLORS["bg_primary"])
         self.content_frame.pack(fill="both", expand=True, padx=28, pady=18)
 
-        self.today_view = tk.Frame(self.content_frame, bg="#050505")
-        self.settings_view = tk.Frame(self.content_frame, bg="#050505")
+        self.today_view = tk.Frame(self.content_frame, bg=self.COLORS["bg_primary"])
+        self.settings_view = tk.Frame(self.content_frame, bg=self.COLORS["bg_primary"])
 
         self.create_today_view()
         self.create_settings_view()
@@ -189,30 +206,30 @@ class LifeCalendarGUI:
             self.root,
             text="Complete setup once, then come back daily.",
             font=("Arial", 9),
-            bg="#050505",
-            fg="#64748b",
+            bg=self.COLORS["bg_primary"],
+            fg=self.COLORS["text_secondary"],
         )
         self.status_label.pack(pady=(0, 12))
 
     def create_today_view(self) -> None:
         """Create the Today dashboard."""
-        card = tk.Frame(self.today_view, bg="#101010")
+        card = tk.Frame(self.today_view, bg=self.COLORS["bg_secondary"])
         card.pack(fill="both", expand=True)
 
         tk.Label(
             card,
             text="TODAY",
             font=("Arial", 24, "bold"),
-            bg="#101010",
-            fg="#f4f4f4",
+            bg=self.COLORS["bg_secondary"],
+            fg=self.COLORS["text_primary"],
         ).pack(anchor="w", padx=28, pady=(24, 6))
 
         self.today_date_label = tk.Label(
             card,
             text="",
             font=("Arial", 11),
-            bg="#101010",
-            fg="#9a9a9a",
+            bg=self.COLORS["bg_secondary"],
+            fg=self.COLORS["text_secondary"],
         )
         self.today_date_label.pack(anchor="w", padx=28)
 
@@ -220,8 +237,8 @@ class LifeCalendarGUI:
             card,
             text="Day 0 / 0",
             font=("Arial", 22, "bold"),
-            bg="#101010",
-            fg="#f2f2f2",
+            bg=self.COLORS["bg_secondary"],
+            fg=self.COLORS["text_primary"],
         )
         self.today_primary_label.pack(anchor="w", padx=28, pady=(26, 4))
 
@@ -229,8 +246,8 @@ class LifeCalendarGUI:
             card,
             text="",
             font=("Arial", 12),
-            bg="#101010",
-            fg="#d8d8d8",
+            bg=self.COLORS["bg_secondary"],
+            fg=self.COLORS["text_primary"],
         )
         self.today_stat_one_label.pack(anchor="w", padx=28, pady=(4, 2))
 

@@ -141,7 +141,23 @@ def main() -> int:
     """
     Main entry point for auto-update.
     Returns exit code (0 = success, 1 = failure).
+    
+    Usage:
+      python auto_update.py              # Normal: generate and set wallpaper
+      python auto_update.py --dry-run    # D6: Test without making changes
     """
+    # D6: Parse command-line arguments
+    import argparse
+    parser = argparse.ArgumentParser(
+        description="Auto-update wallpaper. Use --dry-run to test without changes."
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Test wallpaper generation without actually setting it"
+    )
+    args = parser.parse_args()
+    
     # Force correct working directory (critical for Task Scheduler)
     # Only do this once in main()
     try:
@@ -160,7 +176,10 @@ def main() -> int:
         return 1
 
     logger.info("=" * 50)
-    logger.info("Auto-update started")
+    if args.dry_run:
+        logger.info("Auto-update started (DRY-RUN mode)")
+    else:
+        logger.info("Auto-update started")
 
     # Clean up stale lock files (older than 24 hours)
     _cleanup_stale_lock()
@@ -207,56 +226,79 @@ def main() -> int:
         # Create engine and run
         logger.info("Generating wallpaper...")
         engine = WallpaperEngine(str(config_file))
-        success = engine.run_auto()
-
-        if success:
-            logger.info("Auto-update completed successfully")
-
-            # Mark as updated ONLY after confirmed success
-            mark_updated()
-
-            # Clean up any old error files
-            for error_file_name in [
-                "ERROR_CONFIG_NOT_FOUND.txt",
-                "ERROR_IMPORT_FAILED.txt",
-                "ERROR_GENERATION_FAILED.txt"
-            ]:
-                error_file = BASE_DIR / error_file_name
-                if error_file.exists():
-                    try:
-                        error_file.unlink()
-                    except OSError as e:
-                        import errno
-                        if e.errno == errno.EACCES:
-                            logger.debug(f"Permission denied removing {error_file_name}")
-                        elif e.errno == errno.ENOENT:
-                            pass  # File already removed
-                        else:
-                            logger.debug(f"Could not remove {error_file_name}: {e}")
-
-            return 0
-        else:
-            logger.error("Wallpaper generation or setting failed")
-
-            # Write error file for visibility
-            error_file = BASE_DIR / "ERROR_GENERATION_FAILED.txt"
+        
+        if args.dry_run:
+            # D6: Test mode - generate but don't set or mark as updated
             try:
-                error_file.write_text(
-                    "Life Calendar Error\n"
-                    "===================\n"
-                    "Wallpaper generation failed\n\n"
-                    "Check wallpaper.log for details"
-                )
-            except OSError as e:
-                import errno
-                if e.errno == errno.EACCES:
-                    logger.error(f"Permission denied writing error file: {e}")
-                elif e.errno == errno.ENOSPC:
-                    logger.error(f"No space left on device: {e}")
-                else:
-                    logger.error(f"Could not write error file: {e}")
+                from wallpaper_engine import acquire_lock, release_lock
+                acquire_lock()
+                try:
+                    logger.info("[DRY-RUN] Testing wallpaper generation only...")
+                    success, message = engine.generate_wallpaper()
+                    if success:
+                        logger.info(f"[DRY-RUN] Wallpaper generation successful: {message}")
+                        logger.info("[DRY-RUN] (Would apply wallpaper and mark as updated in normal mode)")
+                        return 0
+                    else:
+                        logger.error(f"[DRY-RUN] Wallpaper generation failed: {message}")
+                        return 1
+                finally:
+                    release_lock()
+            except Exception as e:
+                logger.exception(f"[DRY-RUN] Test failed: {e}")
+                return 1
+        else:
+            # Normal mode - generate and set
+            success = engine.run_auto()
 
-            return 1
+            if success:
+                logger.info("Auto-update completed successfully")
+
+                # Mark as updated ONLY after confirmed success
+                mark_updated()
+
+                # Clean up any old error files
+                for error_file_name in [
+                    "ERROR_CONFIG_NOT_FOUND.txt",
+                    "ERROR_IMPORT_FAILED.txt",
+                    "ERROR_GENERATION_FAILED.txt"
+                ]:
+                    error_file = BASE_DIR / error_file_name
+                    if error_file.exists():
+                        try:
+                            error_file.unlink()
+                        except OSError as e:
+                            import errno
+                            if e.errno == errno.EACCES:
+                                logger.debug(f"Permission denied removing {error_file_name}")
+                            elif e.errno == errno.ENOENT:
+                                pass  # File already removed
+                            else:
+                                logger.debug(f"Could not remove {error_file_name}: {e}")
+
+                return 0
+            else:
+                logger.error("Wallpaper generation or setting failed")
+
+                # Write error file for visibility
+                error_file = BASE_DIR / "ERROR_GENERATION_FAILED.txt"
+                try:
+                    error_file.write_text(
+                        "Life Calendar Error\n"
+                        "===================\n"
+                        "Wallpaper generation failed\n\n"
+                        "Check wallpaper.log for details"
+                    )
+                except OSError as e:
+                    import errno
+                    if e.errno == errno.EACCES:
+                        logger.error(f"Permission denied writing error file: {e}")
+                    elif e.errno == errno.ENOSPC:
+                        logger.error(f"No space left on device: {e}")
+                    else:
+                        logger.error(f"Could not write error file: {e}")
+
+                return 1
 
     except FileNotFoundError as e:
         logger.error(f"File not found: {e}")
