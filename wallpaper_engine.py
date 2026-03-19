@@ -111,21 +111,31 @@ def acquire_lock() -> None:
     if os.path.exists(LOCK_FILE):
         try:
             with open(LOCK_FILE, 'r') as f:
-                old_pid = int(f.read().strip())
-
-            # Check if old process is still running
-            if _is_process_running(old_pid):
-                raise RuntimeError(f"Another LifeCalendar process is already running (PID: {old_pid})")
-            else:
-                # Stale lock - check age; if >2 hours old, remove it
-                lock_age = time.time() - os.path.getmtime(LOCK_FILE)
-                if lock_age > 7200:  # 2 hours
-                    logger.warning(f"Removing stale lock from dead process (PID: {old_pid}, age: {lock_age/3600:.1f}h)")
-                    os.remove(LOCK_FILE)
+                pid_str = f.read().strip()
+            
+            # C1: Safely parse PID; treat non-numeric as corrupted
+            try:
+                old_pid = int(pid_str)
+            except ValueError:
+                logger.debug(f"Corrupted lock file (non-numeric PID: {pid_str}), removing")
+                os.remove(LOCK_FILE)
+                old_pid = None
+            
+            if old_pid is not None:
+                # Check if old process is still running
+                if _is_process_running(old_pid):
+                    raise RuntimeError(f"Another LifeCalendar process is already running (PID: {old_pid})")
                 else:
-                    raise RuntimeError(f"Lock file present but process {old_pid} is dead (lock age: {lock_age/60:.0f}m). Possible concurrent run or recent crash.")
-        except (ValueError, IOError):
-            # Corrupted lock file - remove it
+                    # Stale lock - check age; if >2 hours old, remove it
+                    lock_age = time.time() - os.path.getmtime(LOCK_FILE)
+                    if lock_age > 7200:  # 2 hours
+                        logger.warning(f"Removing stale lock from dead process (PID: {old_pid}, age: {lock_age/3600:.1f}h)")
+                        os.remove(LOCK_FILE)
+                    else:
+                        raise RuntimeError(f"Lock file present but process {old_pid} is dead (lock age: {lock_age/60:.0f}m). Possible concurrent run or recent crash.")
+        except (IOError, OSError) as e:
+            # Corrupted or inaccessible lock file - try to remove it
+            logger.debug(f"Could not read lock file: {e}")
             try:
                 os.remove(LOCK_FILE)
             except OSError:
@@ -139,6 +149,10 @@ def acquire_lock() -> None:
     except FileExistsError:
         # Race condition - another process created it between our check and create
         raise RuntimeError("Another LifeCalendar process is already running")
+    except OSError as e:
+        # C2: Permission denied or other OS-level errors
+        logger.error(f"Failed to create lock file: {e}")
+        raise RuntimeError(f"Cannot create lock file (permission issue or read-only directory): {e}")
 
 
 def release_lock() -> None:

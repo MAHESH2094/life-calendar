@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 import json
 from pathlib import Path
+import shutil
 from typing import Any, Optional
 
 CONFIG_VERSION = 4
@@ -311,7 +312,14 @@ class DailyCheckinStore:
                 # Atomic rename - either succeeds or fails to completion (on POSIX)
                 # On Windows, replace() will overwrite the destination
                 self.path.parent.mkdir(parents=True, exist_ok=True)
-                os.replace(temp_path, str(self.path))
+                try:
+                    os.replace(temp_path, str(self.path))
+                except OSError as e:
+                    # C5: Fallback for Windows permission issues (read-only destination)
+                    try:
+                        shutil.move(temp_path, str(self.path))
+                    except Exception as move_err:
+                        raise OSError(f"Failed to write check-in file (os.replace failed: {e}, shutil.move failed: {move_err})") from move_err
             except Exception:
                 # Clean up temp file if something goes wrong
                 try:

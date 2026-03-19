@@ -14,6 +14,7 @@ NOTE: Scheduler registration is handled by GUI, not this updater.
       This script has SINGLE RESPONSIBILITY: update the wallpaper.
 """
 
+import re
 import sys
 import os
 from pathlib import Path
@@ -58,6 +59,11 @@ def needs_update() -> bool:
         if timestamp_file.exists():
             with open(timestamp_file, 'r') as f:
                 last_update = f.read().strip()
+
+            # C3: Validate timestamp format (YYYY-MM-DD) before using it
+            if not re.match(r'^\d{4}-\d{2}-\d{2}$', last_update):
+                # Corrupted timestamp - treat as "needs update"
+                return True
 
             # If last_update equals or exceeds today (handles clock jumps backward), skip
             if last_update >= today_str:
