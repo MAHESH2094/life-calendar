@@ -39,7 +39,9 @@ def sync_windows_tasks(config: dict, base_dir: Optional[str | Path] = None) -> t
     elif not remove_windows_task(STARTUP_TASK_NAME):
         errors.append(f"Could not remove {STARTUP_TASK_NAME}.")
 
-    return not errors, errors
+    # Preserve order while removing duplicate messages (common with permission errors).
+    deduped_errors = list(dict.fromkeys(errors))
+    return not deduped_errors, deduped_errors
 
 
 def create_wallpaper_task(base_dir: Optional[str | Path] = None) -> tuple[bool, Optional[str]]:
@@ -85,10 +87,10 @@ def resolve_task_action(mode_flag: str, base_dir: Optional[str | Path] = None) -
     target_dir = Path(base_dir) if base_dir else Path(__file__).resolve().parent
 
     if getattr(sys, "frozen", False):
-        # Frozen exe - quote the exe path to handle spaces
+        # Frozen exe - quote the exe path and arguments to handle spaces
         exe_path = str(Path(sys.executable))
         command = f'"{exe_path}"'
-        arguments = mode_flag
+        arguments = f'"{mode_flag}"'
         working_dir = str(Path(sys.executable).resolve().parent)
     else:
         # Python script - quote both the interpreter and script path
@@ -215,7 +217,18 @@ def _create_task_from_xml(task_name: str, xml_content: str) -> tuple[bool, Optio
             return True, None
 
         message = result.stderr.strip() or result.stdout.strip() or f"Unknown error creating {task_name}"
-        return False, message
+
+        lower_message = message.lower()
+        if "access is denied" in lower_message or "0x80070005" in lower_message:
+            return (
+                False,
+                (
+                    f"Access denied while creating '{task_name}'. "
+                    "Run Life Calendar as Administrator and retry automation setup."
+                ),
+            )
+
+        return False, f"Could not create '{task_name}': {message}"
     except Exception as exc:
         return False, str(exc)
     finally:
