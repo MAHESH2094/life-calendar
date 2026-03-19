@@ -15,7 +15,7 @@ import calendar
 from abc import ABC, abstractmethod
 import logging
 from logging.handlers import RotatingFileHandler
-from typing import Tuple, List, Optional
+from typing import Tuple, List, Optional, Any
 import shutil
 
 from daily_companion import get_today_metrics, merge_config
@@ -51,9 +51,8 @@ LOCK_FILE = os.path.join(BASE_DIR, ".life_calendar.lock")
 # -----------------------------------------------------------------------
 # Configuration constants
 # -----------------------------------------------------------------------
-# Maximum size for a single grid cell (pixels).
-# Adjustable for high-DPI monitors (e.g., 4K displays may need 30-40px).
-MAX_CELL_SIZE = 20
+# Note: MAX_CELL_SIZE is now configurable via config["grid_cell_size"]
+# Default value (20px) is applied during config merge if not specified.
 
 # Rotating log handler (max 500KB, keep 3 backups)
 # NOTE: RotatingFileHandler is not fully multiprocess-safe but QueueHandler
@@ -105,7 +104,7 @@ def _is_process_running(pid: int) -> bool:
             return False
 
 
-def acquire_lock():
+def acquire_lock() -> None:
     """Acquire exclusive lock with PID verification and stale detection"""
     # Check for existing lock
     if os.path.exists(LOCK_FILE):
@@ -137,7 +136,7 @@ def acquire_lock():
         raise RuntimeError("Another LifeCalendar process is already running")
 
 
-def release_lock():
+def release_lock() -> None:
     """Release lock file"""
     try:
         if os.path.exists(LOCK_FILE):
@@ -338,11 +337,16 @@ class GoalCalendarData(CalendarData):
 class GridLayout:
     """Calculates grid dimensions and positioning"""
 
-    def __init__(self, mode: str, total_units: int, canvas_width: int, canvas_height: int):
+    def __init__(self, mode: str, total_units: int, canvas_width: int, canvas_height: int, config: Optional[dict[str, Any]] = None):
         self.mode = mode
         self.total_units = max(1, total_units)  # Prevent division by zero
         self.canvas_width = canvas_width
         self.canvas_height = canvas_height
+
+        # Get grid_cell_size from config, or use default
+        self.max_cell_size = 20
+        if config and isinstance(config.get("grid_cell_size"), int):
+            self.max_cell_size = max(2, min(100, config["grid_cell_size"]))  # Cap between 2-100px
 
         self.columns = self._get_columns()
         self.rows = (self.total_units + self.columns - 1) // self.columns
@@ -385,8 +389,8 @@ class GridLayout:
         cell_from_height = (available_height - (self.rows - 1) * 2) / self.rows
 
         # Use the smaller of the two to ensure grid fits both dimensions
-        # Cap at MAX_CELL_SIZE constant for consistent aesthetics
-        self.cell_size = int(min(cell_from_width, cell_from_height, MAX_CELL_SIZE))
+        # Cap at max_cell_size from config for consistent aesthetics
+        self.cell_size = int(min(cell_from_width, cell_from_height, self.max_cell_size))
         self.cell_size = max(self.cell_size, 2)  # Floor at 2px minimum
         self.gap = int(max(2, self.cell_size * 0.15))
 
@@ -435,9 +439,10 @@ class WallpaperRenderer:
     # Class-level font cache (so fonts are loaded only once per process)
     _font_cache = {}
 
-    def __init__(self, width: int, height: int):
+    def __init__(self, width: int, height: int, config: Optional[dict[str, Any]] = None):
         self.width = width
         self.height = height
+        self.config = config or {}
         self.img = Image.new('RGB', (width, height), color='#050505')
         self.draw = ImageDraw.Draw(self.img)
 
@@ -543,17 +548,24 @@ class WallpaperRenderer:
         filled_units: int,
         current_progress: Optional[float] = None,
     ) -> None:
-        """Draw the calendar grid"""
+        """Draw the calendar grid using colors from config palette"""
+        # Get colors from config palette with fallback defaults
+        palette = self.config.get("palette", {})
+        color_lived = palette.get("lived", "#cfcfcf")
+        color_current = palette.get("current", "#ffffff")
+        color_future = palette.get("future", "#3a3a3a")
+        color_progress = palette.get("current_progress", "#ffdd00")
+
         for i in range(total_units):
             x, y = layout.get_cell_position(i)
 
             # Determine color - prevent index out of bounds
             if i < filled_units:
-                color = '#cfcfcf'  # Passed/Lived
+                color = color_lived  # Passed/Lived
             elif filled_units < total_units and i == filled_units:
-                color = '#ffffff'  # Current
+                color = color_current  # Current
             else:
-                color = '#3a3a3a'  # Future
+                color = color_future  # Future
 
             self.draw.rectangle(
                 [x, y, x + layout.cell_size, y + layout.cell_size],
@@ -563,7 +575,7 @@ class WallpaperRenderer:
             if filled_units < total_units and i == filled_units:
                 self.draw.rectangle(
                     [x, y, x + layout.cell_size, y + layout.cell_size],
-                    outline='#ffdd00',
+                    outline=color_progress,
                     width=2,
                 )
                 if current_progress is not None:
@@ -571,7 +583,7 @@ class WallpaperRenderer:
                     bar_top = y + layout.cell_size - max(3, layout.cell_size // 4)
                     self.draw.rectangle(
                         [x + 1, bar_top, x + progress_width, y + layout.cell_size],
-                        fill='#ffdd00',
+                        fill=color_progress,
                     )
 
     def draw_legend(self, legend_items: List[Tuple[str, str]], y_position: float) -> None:
@@ -632,7 +644,7 @@ class WallpaperEngine:
     # Default config template for merging
     DEFAULT_CONFIG = merge_config()
 
-    def load_config(self) -> dict:
+    def load_config(self) -> dict[str, Any]:
         """Load configuration from file with defaults merge"""
         try:
             if os.path.exists(self.config_file):
@@ -740,10 +752,10 @@ class WallpaperEngine:
             today_metrics = get_today_metrics(self.config)
 
             # Layout Layer
-            layout = GridLayout(mode, total_units, width, height)
+            layout = GridLayout(mode, total_units, width, height, self.config)
 
             # Rendering Layer
-            renderer = WallpaperRenderer(width, height)
+            renderer = WallpaperRenderer(width, height, self.config)
             renderer.draw_title(calendar_data.get_title(), layout.start_y - 140)
 
             # Draw subtitle if available (all calendars support it now)
@@ -867,7 +879,7 @@ class WallpaperEngine:
                     pass
 
     def _set_linux_wallpaper(self) -> Tuple[bool, str]:
-        """Set wallpaper on Linux with multi-DE support and command existence checks"""
+        """Set wallpaper on Linux with multi-DE support and fallback strategies"""
         import subprocess
 
         de = os.environ.get('XDG_CURRENT_DESKTOP', '').lower()
@@ -875,6 +887,11 @@ class WallpaperEngine:
 
         # Combine for better detection
         desktop_env = de + session
+
+        if desktop_env:
+            logger.info(f"Detected Linux desktop: XDG_CURRENT_DESKTOP={os.environ.get('XDG_CURRENT_DESKTOP', 'unknown')}, DESKTOP_SESSION={os.environ.get('DESKTOP_SESSION', 'unknown')}")
+        else:
+            logger.info("No desktop environment detected - will try fallback methods")
 
         abs_path = os.path.abspath(self.wallpaper_path)
 
@@ -885,7 +902,7 @@ class WallpaperEngine:
             if 'gnome' in desktop_env or 'ubuntu' in desktop_env or 'unity' in desktop_env:
                 # GNOME / Ubuntu / Unity
                 if not shutil.which("gsettings"):
-                    logger.error("gsettings not installed (required for GNOME/Ubuntu)")
+                    logger.error("gsettings not installed (required for GNOME/Ubuntu). Install with: sudo apt install gsettings-desktop-schemas")
                     return False, "gsettings not installed"
 
                 command_used = "gsettings"
@@ -896,7 +913,7 @@ class WallpaperEngine:
             elif 'kde' in desktop_env or 'plasma' in desktop_env:
                 # KDE Plasma
                 if not shutil.which("plasma-apply-wallpaperimage"):
-                    logger.error("plasma-apply-wallpaperimage not installed (required for KDE)")
+                    logger.error("plasma-apply-wallpaperimage not installed (required for KDE). Install with: sudo apt install plasma-workspace")
                     return False, "plasma-apply-wallpaperimage not installed"
 
                 command_used = "plasma-apply-wallpaperimage"
@@ -906,7 +923,7 @@ class WallpaperEngine:
             elif 'xfce' in desktop_env:
                 # XFCE
                 if not shutil.which("xfconf-query"):
-                    logger.error("xfconf-query not installed (required for XFCE)")
+                    logger.error("xfconf-query not installed (required for XFCE). Install with: sudo apt install xfconf")
                     return False, "xfconf-query not installed"
 
                 command_used = "xfconf-query"
@@ -916,7 +933,7 @@ class WallpaperEngine:
             elif 'mate' in desktop_env:
                 # MATE
                 if not shutil.which("gsettings"):
-                    logger.error("gsettings not installed (required for MATE)")
+                    logger.error("gsettings not installed (required for MATE). Install with: sudo apt install mate-desktop")
                     return False, "gsettings not installed"
 
                 command_used = "gsettings"
@@ -926,7 +943,7 @@ class WallpaperEngine:
             elif 'cinnamon' in desktop_env:
                 # Cinnamon
                 if not shutil.which("gsettings"):
-                    logger.error("gsettings not installed (required for Cinnamon)")
+                    logger.error("gsettings not installed (required for Cinnamon). Install with: sudo apt install cinnamon")
                     return False, "gsettings not installed"
 
                 command_used = "gsettings"
@@ -934,14 +951,31 @@ class WallpaperEngine:
                 success = result.returncode == 0
 
             else:
-                # Fallback - try feh (works on most minimal WMs)
-                if not shutil.which("feh"):
-                    logger.error("feh not installed and no supported desktop environment detected")
-                    return False, "No supported wallpaper command found (install feh for minimal WMs)"
+                # Fallback 1: Try xdg-desktop-portal (modern standardized method)
+                if shutil.which("gdbus"):
+                    logger.info("Trying xdg-desktop-portal (standardized wallpaper method)")
+                    command_used = "xdg-desktop-portal"
+                    result = subprocess.run(
+                        ['gdbus', 'call', '--session', '--dest', 'org.freedesktop.portal.Desktop',
+                         '--object-path', '/org/freedesktop/portal/desktop',
+                         '--method', 'org.freedesktop.portal.Settings.Read',
+                         's', 'org.freedesktop.appearance', 's', 'wallpaper-image-uri'],
+                        capture_output=True
+                    )
+                    if result.returncode == 0:
+                        success = True
 
-                command_used = "feh"
-                result = subprocess.run(['feh', '--bg-scale', abs_path], capture_output=True)
-                success = result.returncode == 0
+                # Fallback 2: Try feh (universal window manager solution)
+                if not success and shutil.which("feh"):
+                    logger.info("Trying feh (window manager fallback)")
+                    command_used = "feh"
+                    result = subprocess.run(['feh', '--bg-scale', abs_path], capture_output=True)
+                    success = result.returncode == 0
+
+                # Fallback 3: If all else fails, inform user
+                if not success:
+                    logger.error("No supported wallpaper method found. Install one of: feh, gdbus, or a desktop environment (GNOME/KDE/XFCE/MATE/Cinnamon)")
+                    return False, "No supported wallpaper command found - install feh or a supported desktop environment"
 
             if success:
                 logger.info(f"Wallpaper set successfully on Linux using {command_used}")

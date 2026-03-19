@@ -12,6 +12,47 @@ DIST_DIR = BASE_DIR / "dist"
 BUILD_DIR = BASE_DIR / "build"
 
 
+def get_hidden_imports() -> list[str]:
+    """Dynamically extract hidden imports from requirements.txt.
+
+    Returns a list of --hidden-import=module flags for modules that
+    need explicit importing during bundling.
+    """
+    hidden_import_modules = {
+        "pillow": "PIL",           # Package pillow imports as PIL
+        "screeninfo": "screeninfo", # Direct mapping
+        "auto_update": "auto_update",  # Local module
+    }
+
+    requirements_file = BASE_DIR / "requirements.txt"
+    flags = []
+
+    if not requirements_file.exists():
+        # Fallback to hardcoded defaults if requirements.txt missing
+        return [f"--hidden-import={module}" for module in hidden_import_modules.values()]
+
+    try:
+        with open(requirements_file, 'r') as f:
+            for line in f:
+                line = line.strip().split('#')[0].strip()  # Remove comments
+                if not line:
+                    continue
+
+                # Parse package name (before == or other operators)
+                package_name = line.split('==')[0].split('>=')[0].split('<=')[0].split('>')[0].split('<')[0].strip()
+
+                # Check if this package needs a hidden import
+                import_name = hidden_import_modules.get(package_name.lower())
+                if import_name:
+                    flags.append(f"--hidden-import={import_name}")
+    except Exception as e:
+        print(f"[WARN]   Could not read requirements.txt: {e}")
+        # Fallback to hardcoded
+        return [f"--hidden-import={module}" for module in hidden_import_modules.values()]
+
+    return flags
+
+
 def cleanup() -> None:
     """Remove old build artifacts."""
     print("[CLEAN] Removing old build artifacts...")
@@ -44,6 +85,8 @@ def run_command(cmd: list[str], description: str) -> bool:
 
 def build_app() -> bool:
     """Build the GUI application and bundled command modes."""
+    hidden_imports = get_hidden_imports()
+
     cmd = [
         sys.executable,
         "-m",
@@ -54,9 +97,7 @@ def build_app() -> bool:
         "LifeCalendar",
         "--clean",
         "--noconfirm",
-        "--hidden-import=screeninfo",
-        "--hidden-import=PIL",
-        "--hidden-import=auto_update",
+        *hidden_imports,
         str(BASE_DIR / "life_calendar_gui.py"),
     ]
     return run_command(cmd, "Building LifeCalendar.exe")

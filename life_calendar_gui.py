@@ -901,20 +901,21 @@ class LifeCalendarGUI:
         self.height_entry.insert(0, str(height))
 
     def on_note_change(self, *_args: Any) -> None:
-        """Keep the daily note to one line and 120 chars."""
+        """Keep the daily note to one line and max length from config."""
         if self._normalizing_note:
             return
 
+        max_length = self.config.get("max_note_length", MAX_NOTE_LENGTH)
         raw_note = self.note_var.get().replace("\r", " ").replace("\n", " ")
-        if len(raw_note) > MAX_NOTE_LENGTH:
-            raw_note = raw_note[:MAX_NOTE_LENGTH]
+        if len(raw_note) > max_length:
+            raw_note = raw_note[:max_length]
 
         if raw_note != self.note_var.get():
             self._normalizing_note = True
             self.note_var.set(raw_note)
             self._normalizing_note = False
 
-        self.note_counter_label.config(text=f"{len(self.note_var.get())}/{MAX_NOTE_LENGTH}")
+        self.note_counter_label.config(text=f"{len(self.note_var.get())}/{max_length}")
 
     def show_view(self, view_name: str) -> None:
         """Show the selected view."""
@@ -1021,56 +1022,57 @@ class LifeCalendarGUI:
         else:
             self.save_settings_and_activate()
 
-    def _sync_config_from_ui(self) -> bool:
-        """Validate settings inputs and sync them into the config."""
-        mode = self.mode_var.get()
-        self.config["mode"] = mode
+    def _validate_and_sync_life_mode(self) -> bool:
+        """Validate and sync life mode settings from UI to config."""
+        dob = self.dob_entry.get().strip()
+        if not dob:
+            messagebox.showerror("Validation Error", "Date of birth is required.")
+            return False
+        if safe_date(dob) is None:
+            messagebox.showerror("Invalid Date", "Date of birth must use YYYY-MM-DD.")
+            return False
 
-        if mode == "life":
-            dob = self.dob_entry.get().strip()
-            if not dob:
-                messagebox.showerror("Validation Error", "Date of birth is required.")
-                return False
-            if safe_date(dob) is None:
-                messagebox.showerror("Invalid Date", "Date of birth must use YYYY-MM-DD.")
-                return False
+        lifespan_str = self.lifespan_entry.get().strip()
+        if not lifespan_str.isdigit():
+            messagebox.showerror("Validation Error", "Lifespan must be a number.")
+            return False
 
-            lifespan_str = self.lifespan_entry.get().strip()
-            if not lifespan_str.isdigit():
-                messagebox.showerror("Validation Error", "Lifespan must be a number.")
-                return False
+        lifespan = int(lifespan_str)
+        if lifespan < 1 or lifespan > 150:
+            messagebox.showerror("Validation Error", "Lifespan must be between 1 and 150.")
+            return False
 
-            lifespan = int(lifespan_str)
-            if lifespan < 1 or lifespan > 150:
-                messagebox.showerror("Validation Error", "Lifespan must be between 1 and 150.")
-                return False
+        self.config["dob"] = dob
+        self.config["lifespan"] = lifespan
+        return True
 
-            self.config["dob"] = dob
-            self.config["lifespan"] = lifespan
+    def _validate_and_sync_goal_mode(self) -> bool:
+        """Validate and sync goal mode settings from UI to config."""
+        title = self.goal_title_entry.get().strip()
+        if not title:
+            messagebox.showerror("Validation Error", "Goal title is required.")
+            return False
 
-        elif mode == "goal":
-            title = self.goal_title_entry.get().strip()
-            if not title:
-                messagebox.showerror("Validation Error", "Goal title is required.")
-                return False
+        start = self.goal_start_entry.get().strip()
+        end = self.goal_end_entry.get().strip()
+        start_date = safe_date(start)
+        end_date = safe_date(end)
 
-            start = self.goal_start_entry.get().strip()
-            end = self.goal_end_entry.get().strip()
-            start_date = safe_date(start)
-            end_date = safe_date(end)
+        if start_date is None or end_date is None:
+            messagebox.showerror("Invalid Date", "Goal dates must use YYYY-MM-DD.")
+            return False
+        if end_date <= start_date:
+            messagebox.showerror("Invalid Dates", "Goal end must be after goal start.")
+            return False
 
-            if start_date is None or end_date is None:
-                messagebox.showerror("Invalid Date", "Goal dates must use YYYY-MM-DD.")
-                return False
-            if end_date <= start_date:
-                messagebox.showerror("Invalid Dates", "Goal end must be after goal start.")
-                return False
+        self.config["goal_title"] = title
+        self.config["goal_subtitle"] = self.goal_subtitle_entry.get().strip()
+        self.config["goal_start"] = start
+        self.config["goal_end"] = end
+        return True
 
-            self.config["goal_title"] = title
-            self.config["goal_subtitle"] = self.goal_subtitle_entry.get().strip()
-            self.config["goal_start"] = start
-            self.config["goal_end"] = end
-
+    def _validate_and_sync_resolution(self) -> bool:
+        """Validate and sync resolution settings from UI to config."""
         width = safe_int(self.width_entry.get(), 1920)
         height = safe_int(self.height_entry.get(), 1080)
         if width < 800 or height < 600:
@@ -1079,10 +1081,40 @@ class LifeCalendarGUI:
 
         self.config["resolution_width"] = width
         self.config["resolution_height"] = height
+        return True
+
+    def _sync_automation_settings(self) -> None:
+        """Sync automation checkbox settings to config."""
         self.config["automation"] = {
             "startup_enabled": bool(self.startup_enabled_var.get()),
             "wallpaper_refresh_enabled": bool(self.wallpaper_refresh_enabled_var.get()),
         }
+
+    def _sync_config_from_ui(self) -> bool:
+        """Validate settings inputs and sync them into the config.
+
+        Orchestrates validation and syncing of all UI inputs to config dictionary.
+        Returns True if all validation passes, False otherwise.
+        """
+        mode = self.mode_var.get()
+        self.config["mode"] = mode
+
+        # Validate mode-specific settings
+        if mode == "life":
+            if not self._validate_and_sync_life_mode():
+                return False
+        elif mode == "goal":
+            if not self._validate_and_sync_goal_mode():
+                return False
+
+        # Validate and sync resolution
+        if not self._validate_and_sync_resolution():
+            return False
+
+        # Sync automation settings
+        self._sync_automation_settings()
+
+        # Finalize config with merge
         self.config = merge_config(self.config)
         return True
 

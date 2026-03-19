@@ -17,7 +17,6 @@ from wallpaper_engine import (
     GoalCalendarData,
     GridLayout,
     safe_date,
-    MAX_CELL_SIZE,
 )
 
 
@@ -251,7 +250,7 @@ class TestGridLayout:
 
     def test_cell_size_within_bounds(self):
         layout = GridLayout("life", 4680, 1920, 1080)
-        assert 2 <= layout.cell_size <= MAX_CELL_SIZE
+        assert 2 <= layout.cell_size <= 20  # Default max_cell_size is 20
 
     def test_zero_total_units_no_crash(self):
         """total_units=0 should be clamped to 1, no division by zero."""
@@ -397,7 +396,26 @@ class TestWallpaperGeneration:
         assert ok, msg
 
 
-# ==================== MAX_CELL_SIZE ====================
+# ==================== Configurable grid_cell_size ====================
 
-def test_max_cell_size_constant_is_used():
-    assert isinstance(MAX_CELL_SIZE, int) and MAX_CELL_SIZE > 0
+def test_grid_cell_size_configurable():
+    """Test that grid_cell_size is configurable via config"""
+    config = {
+        "mode": "life",
+        "grid_cell_size": 30,
+        "resolution_width": 1920,
+        "resolution_height": 1080,
+    }
+    layout = GridLayout("life", 4680, 1920, 1080, config)
+    assert layout.max_cell_size == 30
+    assert layout.cell_size <= 30
+
+def test_grid_cell_size_clamped():
+    """Test that grid_cell_size is clamped to valid range (2-100px)"""
+    config_too_small = {"grid_cell_size": -5}
+    layout = GridLayout("life", 4680, 1920, 1080, config_too_small)
+    assert layout.max_cell_size == 2  # Minimum of 2px
+
+    config_too_large = {"grid_cell_size": 500}
+    layout = GridLayout("life", 4680, 1920, 1080, config_too_large)
+    assert layout.max_cell_size == 100  # Maximum of 100px

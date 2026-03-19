@@ -25,7 +25,14 @@ DEFAULT_CONFIG = {
     "resolution_width": 1920,
     "resolution_height": 1080,
     "config_version": CONFIG_VERSION,
-    "palette": {},
+    "grid_cell_size": 20,
+    "max_note_length": 120,
+    "palette": {
+        "lived": "#cfcfcf",      # Passed/Lived cells
+        "current": "#ffffff",     # Current cell
+        "future": "#3a3a3a",      # Future cells
+        "current_progress": "#ffdd00"  # Current progress bar
+    },
     "opportunities": [],
     "automation": {
         "startup_enabled": True,
@@ -381,12 +388,12 @@ def normalize_mood(mood: Any) -> str:
     return "neutral"
 
 
-def normalize_note(note: Any) -> str:
+def normalize_note(note: Any, max_length: int = 120) -> str:
     """Normalize note text to a single trimmed line."""
     if not isinstance(note, str):
         return ""
     single_line = " ".join(note.replace("\r", " ").replace("\n", " ").split())
-    return single_line[:MAX_NOTE_LENGTH]
+    return single_line[:max_length]
 
 
 def _is_leap_year(year: int) -> bool:

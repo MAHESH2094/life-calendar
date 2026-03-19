@@ -87,8 +87,14 @@ def _cleanup_stale_lock() -> None:
                 lock_file.unlink()
                 sys.stderr.write("INFO: Removed stale lock file (>24 hours old)\n")
     except OSError as e:
-        # Cleanup failure is non-critical
-        sys.stderr.write(f"DEBUG: Could not clean up stale lock: {e}\n")
+        # Cleanup failure is non-critical; provide context for debugging
+        import errno
+        if e.errno == errno.EACCES:
+            sys.stderr.write(f"DEBUG: Permission denied accessing lock file: {e}\n")
+        elif e.errno == errno.ENOENT:
+            sys.stderr.write("DEBUG: Lock file already removed\n")
+        else:
+            sys.stderr.write(f"DEBUG: Could not clean up stale lock: {e}\n")
 
 
 def _wallpaper_recently_modified() -> bool:
@@ -181,8 +187,14 @@ def main() -> int:
                     "Config file not found\n\n"
                     "Solution: Run LifeCalendar.exe first to create a config file."
                 )
-            except OSError:
-                logger.error("Could not write error file")
+            except OSError as e:
+                import errno
+                if e.errno == errno.EACCES:
+                    logger.error(f"Permission denied writing error file: {e}")
+                elif e.errno == errno.ENOSPC:
+                    logger.error(f"No space left on device: {e}")
+                else:
+                    logger.error(f"Could not write error file: {e}")
 
             return 1
 
@@ -207,24 +219,36 @@ def main() -> int:
                 if error_file.exists():
                     try:
                         error_file.unlink()
-                    except OSError:
-                        pass
+                    except OSError as e:
+                        import errno
+                        if e.errno == errno.EACCES:
+                            logger.debug(f"Permission denied removing {error_file_name}")
+                        elif e.errno == errno.ENOENT:
+                            pass  # File already removed
+                        else:
+                            logger.debug(f"Could not remove {error_file_name}: {e}")
 
             return 0
         else:
             logger.error("Wallpaper generation or setting failed")
 
             # Write error file for visibility
+            error_file = BASE_DIR / "ERROR_GENERATION_FAILED.txt"
             try:
-                error_file = BASE_DIR / "ERROR_GENERATION_FAILED.txt"
                 error_file.write_text(
                     "Life Calendar Error\n"
                     "===================\n"
                     "Wallpaper generation failed\n\n"
                     "Check wallpaper.log for details"
                 )
-            except OSError:
-                logger.error("Could not write error file")
+            except OSError as e:
+                import errno
+                if e.errno == errno.EACCES:
+                    logger.error(f"Permission denied writing error file: {e}")
+                elif e.errno == errno.ENOSPC:
+                    logger.error(f"No space left on device: {e}")
+                else:
+                    logger.error(f"Could not write error file: {e}")
 
             return 1
 
