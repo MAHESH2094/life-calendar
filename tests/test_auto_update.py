@@ -97,7 +97,7 @@ class TestMain:
         with patch("auto_update.BASE_DIR", temp_dir), \
              patch("auto_update.get_base_dir", return_value=temp_dir):
             from auto_update import main
-            result = main()
+            result = main(argv=[])
             assert result == 0
 
     def test_missing_config_returns_1(self, temp_dir):
@@ -105,7 +105,7 @@ class TestMain:
         with patch("auto_update.BASE_DIR", temp_dir), \
              patch("auto_update.get_base_dir", return_value=temp_dir):
             from auto_update import main
-            result = main()
+            result = main(argv=[])
             assert result == 1
 
     def test_successful_update(self, temp_dir):
@@ -124,7 +124,7 @@ class TestMain:
             # Mock the engine's run_auto to avoid real wallpaper setting
             with patch("wallpaper_engine.WallpaperEngine.run_auto", return_value=True):
                 from auto_update import main
-                result = main()
+                result = main(argv=[])
                 assert result == 0
 
             # Timestamp should be written

@@ -18,6 +18,7 @@ import re
 import sys
 import os
 from pathlib import Path
+from typing import Optional
 
 
 def get_base_dir() -> Path:
@@ -137,10 +138,14 @@ def mark_updated() -> None:
         pass  # Non-critical - worst case we update again
 
 
-def main() -> int:
+def main(argv: Optional[list[str]] = None) -> int:
     """
     Main entry point for auto-update.
     Returns exit code (0 = success, 1 = failure).
+    
+    Args:
+        argv: Optional list of command-line arguments (for testing).
+              If None, uses sys.argv[1:].
     
     Usage:
       python auto_update.py              # Normal: generate and set wallpaper
@@ -156,7 +161,7 @@ def main() -> int:
         action="store_true",
         help="Test wallpaper generation without actually setting it"
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     
     # Force correct working directory (critical for Task Scheduler)
     # Only do this once in main()
