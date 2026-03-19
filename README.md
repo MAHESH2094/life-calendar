@@ -159,7 +159,11 @@ Edit `life_calendar_config.json` directly or use the GUI to set your dates and r
   "lifespan": 90,
   "resolution_width": 1920,
   "resolution_height": 1080,
-  "config_version": 3
+  "config_version": 4,
+  "automation": {
+    "startup_enabled": true,
+    "wallpaper_refresh_enabled": true
+  }
 }
 ```
 
@@ -172,7 +176,11 @@ Edit `life_calendar_config.json` directly or use the GUI to set your dates and r
   "lifespan": 90,
   "resolution_width": 1920,
   "resolution_height": 1080,
-  "config_version": 3,
+  "config_version": 4,
+  "automation": {
+    "startup_enabled": true,
+    "wallpaper_refresh_enabled": true
+  },
   "palette": {
     "background": "#050505",
     "title": "#f2f2f2",

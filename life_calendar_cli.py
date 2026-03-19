@@ -74,48 +74,41 @@ def _install_cron(cron_time: str = "1 0 * * *") -> None:
 
 
 def _install_windows_task() -> None:
-    """Create a daily Windows task using the single packaged executable."""
+    """Create a Windows Task Scheduler entry using windows_automation module."""
     if platform.system() != "Windows":
         print("ERROR: Windows task creation only works on Windows.")
         sys.exit(1)
 
-    exe_path = BASE_DIR / "LifeCalendar_Package" / "LifeCalendar.exe"
-    if exe_path.exists():
-        task_target = f'"{exe_path}" --headless-update'
-    else:
-        task_target = f'"{sys.executable}" "{BASE_DIR / "life_calendar_gui.py"}" --headless-update'
-        print(f"EXE not found, using Python entrypoint: {task_target}")
-
-    cmd = [
-        "schtasks",
-        "/Create",
-        "/SC",
-        "DAILY",
-        "/TN",
-        "LifeCalendarWallpaper",
-        "/TR",
-        task_target,
-        "/ST",
-        "00:01",
-        "/F",
-    ]
-
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-        if result.returncode == 0:
-            print("Windows Task Scheduler entry created.")
-            print("The wallpaper will update daily at 00:01.")
+        from windows_automation import sync_windows_tasks
+        import json
+
+        config_file = BASE_DIR / "life_calendar_config.json"
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+
+        # Enable both automation options
+        config["automation"] = {
+            "startup_enabled": True,
+            "wallpaper_refresh_enabled": True,
+        }
+
+        success, errors = sync_windows_tasks(config, BASE_DIR)
+        if success:
+            print("Windows Task Scheduler entries created successfully!")
+            print("  - LifeCalendarWallpaper: Updates daily at 00:01 and on unlock")
+            print("  - LifeCalendarStartupPrompt: Runs at login")
         else:
-            if "access denied" in result.stderr.lower():
-                print("ERROR: Access denied. Please run this command as Administrator.")
-            else:
-                print(f"ERROR: Failed to create task: {result.stderr}")
+            print("ERROR: Failed to create Windows tasks:")
+            for error in errors:
+                print(f"  - {error}")
             sys.exit(1)
-    except subprocess.TimeoutExpired:
-        print("ERROR: Task creation timed out.")
+
+    except FileNotFoundError:
+        print(f"ERROR: Config file not found: {config_file}")
         sys.exit(1)
     except Exception as exc:
-        print(f"ERROR: Could not create Windows task: {exc}")
+        print(f"ERROR: Could not create Windows tasks: {exc}")
         sys.exit(1)
 
 

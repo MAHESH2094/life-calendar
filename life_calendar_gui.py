@@ -1131,9 +1131,18 @@ class LifeCalendarGUI:
                 self.set_status("Windows automation is active.", success=True)
             return True
 
-        self.automation_warning = "Automation needs attention: " + " ".join(errors)
+        # Format errors for display
+        error_details = "\n".join(f"• {error}" for error in errors)
+        self.automation_warning = f"Automation setup encountered issues:\n{error_details}"
         self.update_automation_status()
-        self.set_status(self.automation_warning, warning=True)
+        self.set_status("Automation setup failed - check retry button.", warning=True)
+
+        # Show detailed error dialog to user
+        messagebox.showwarning(
+            "Automation Setup Failed",
+            f"Could not set up Windows automation:\n\n{error_details}\n\n"
+            "You can retry from Settings or run as Administrator for full permissions.",
+        )
         return False
 
     def retry_automation(self) -> None:

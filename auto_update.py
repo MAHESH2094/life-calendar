@@ -71,6 +71,26 @@ def needs_update() -> bool:
         return True
 
 
+def _cleanup_stale_lock() -> None:
+    """
+    Remove lock file if it's older than 24 hours.
+    Prevents permanent hangs after a crash.
+    """
+    import time
+    import sys
+
+    lock_file = BASE_DIR / ".life_calendar.lock"
+    try:
+        if lock_file.exists():
+            age_seconds = time.time() - lock_file.stat().st_mtime
+            if age_seconds > 86400:  # 24 hours
+                lock_file.unlink()
+                sys.stderr.write("INFO: Removed stale lock file (>24 hours old)\n")
+    except OSError as e:
+        # Cleanup failure is non-critical
+        sys.stderr.write(f"DEBUG: Could not clean up stale lock: {e}\n")
+
+
 def _wallpaper_recently_modified() -> bool:
     """
     Rate-limit guard: returns True if the wallpaper PNG was modified
@@ -129,6 +149,9 @@ def main() -> int:
 
     logger.info("=" * 50)
     logger.info("Auto-update started")
+
+    # Clean up stale lock files (older than 24 hours)
+    _cleanup_stale_lock()
 
     # Check if already updated today (prevents duplicate updates from multiple triggers)
     if not needs_update():

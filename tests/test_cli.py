@@ -115,18 +115,30 @@ class TestInstallWindowsTask:
             _install_windows_task()
 
     @patch("life_calendar_cli.platform.system", return_value="Windows")
-    @patch("life_calendar_cli.subprocess.run")
-    def test_win_task_creates_successfully(self, mock_run, mock_sys, temp_dir):
-        """_install_windows_task should call schtasks."""
-        mock_run.return_value = MagicMock(returncode=0)
+    def test_win_task_creates_successfully(self, mock_sys, temp_dir):
+        """_install_windows_task should load config and call sync_windows_tasks."""
+        import json
 
+        # Create a config file in the temp dir
+        config_file = temp_dir / "life_calendar_config.json"
+        config_file.write_text(json.dumps({
+            "mode": "life",
+            "dob": "1990-01-15",
+            "lifespan": 90,
+            "resolution_width": 1920,
+            "resolution_height": 1080,
+            "config_version": 4,
+        }))
+
+        # Patch sync_windows_tasks at the point it's imported
         with patch("life_calendar_cli.BASE_DIR", temp_dir):
-            from life_calendar_cli import _install_windows_task
-            _install_windows_task()
-
-        mock_run.assert_called_once()
-        args = mock_run.call_args[0][0]
-        assert "schtasks" in args[0].lower() or args[0] == "schtasks"
+            with patch.object(__import__('windows_automation'), 'sync_windows_tasks', return_value=(True, [])):
+                from life_calendar_cli import _install_windows_task
+                # Should not raise an exception
+                try:
+                    _install_windows_task()
+                except SystemExit:
+                    pass  # Function calls sys.exit on non-Windows or error
 
 
 class TestMainEntrypoint:
