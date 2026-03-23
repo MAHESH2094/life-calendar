@@ -1,10 +1,32 @@
 """Tests for GUI entrypoint command modes."""
 
 import json
+import time
 from datetime import date
 from unittest.mock import MagicMock, patch
 
-import life_calendar_gui
+import pytest
+
+# Some Linux CI images omit tkinter entirely. These tests validate GUI glue,
+# so skip this module cleanly when tkinter is unavailable.
+tkinter = pytest.importorskip("tkinter")
+
+
+def _has_tk_display() -> bool:
+    """Return True when tkinter can create a root window."""
+    try:
+        root = tkinter.Tk()
+        root.withdraw()
+        root.destroy()
+        return True
+    except tkinter.TclError:
+        return False
+
+
+if not _has_tk_display():
+    pytest.skip("No Tk display available in this environment", allow_module_level=True)
+
+import life_calendar_gui  # noqa: E402
 
 
 def test_startup_check_skips_gui_when_today_is_already_checked_in(tmp_path):
@@ -163,7 +185,6 @@ class TestGUIAsyncOperations:
 
     def test_wallpaper_task_worker_exception_handling(self):
         """Verify that exceptions in worker threads are captured and passed to callback."""
-        import time
         from unittest.mock import MagicMock
 
         gui = MagicMock()
@@ -197,8 +218,10 @@ class TestGUIAsyncOperations:
         # Run task with failing worker
         gui._run_wallpaper_task("Failing task", failing_worker, on_done)
 
-        # Wait a moment for worker to execute
-        time.sleep(0.15)
+        # Wait for worker callback to be queued (avoid fixed-sleep flakiness on CI)
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline and not captured_callbacks:
+            time.sleep(0.01)
 
         # The callback should have been queued via root.after
         assert len(captured_callbacks) > 0

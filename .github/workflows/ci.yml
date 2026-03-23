@@ -1,6 +1,9 @@
 # .github/workflows/ci.yml
 name: CI
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   push:
     branches: [ main ]
@@ -44,9 +47,14 @@ jobs:
         pip install -r requirements.txt
         pip install pytest pytest-cov
 
+    - name: Install Xvfb
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y xvfb
+
     - name: Run tests with coverage
       run: |
-        pytest -v --cov=. --cov-report=xml --cov-report=term-missing
+        xvfb-run -a pytest -v --cov=. --cov-report=xml --cov-report=term-missing
 
     - name: Upload coverage to Codecov
       if: matrix.python-version == '3.12'
