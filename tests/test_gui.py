@@ -63,38 +63,28 @@ class TestGUIAsyncOperations:
 
     def test_set_wallpaper_busy_manages_button_state(self):
         """Verify _set_wallpaper_busy correctly disables/enables buttons."""
-        import tkinter as tk
         from unittest.mock import MagicMock
 
-        # Create a real Tk window (headless on CI)
-        root = tk.Tk()
-        root.withdraw()  # Hide the window
+        # Use mocks only so the test works on headless CI runners.
+        gui = MagicMock()
+        gui._wallpaper_task_running = False
+        gui.save_settings_button = MagicMock()
+        gui.preview_button = MagicMock()
+        gui.refresh_button = MagicMock()
 
-        try:
-            # Create a minimal GUI object
-            gui = MagicMock()
-            gui._wallpaper_task_running = False
-            gui.save_settings_button = MagicMock()
-            gui.preview_button = MagicMock()
-            gui.refresh_button = MagicMock()
+        gui._set_wallpaper_busy = life_calendar_gui.LifeCalendarGUI._set_wallpaper_busy.__get__(gui)
 
-            # Bind the actual method to the mock
-            gui._set_wallpaper_busy = life_calendar_gui.LifeCalendarGUI._set_wallpaper_busy.__get__(gui)
+        # Test: set busy
+        gui._set_wallpaper_busy(True)
+        assert gui._wallpaper_task_running is True
+        gui.save_settings_button.config.assert_called_with(state="disabled")
+        gui.preview_button.config.assert_called_with(state="disabled")
+        gui.refresh_button.config.assert_called_with(state="disabled")
 
-            # Test: set busy
-            gui._set_wallpaper_busy(True)
-            assert gui._wallpaper_task_running is True
-            gui.save_settings_button.config.assert_called_with(state="disabled")
-            gui.preview_button.config.assert_called_with(state="disabled")
-            gui.refresh_button.config.assert_called_with(state="disabled")
-
-            # Test: set not busy
-            gui._set_wallpaper_busy(False)
-            assert gui._wallpaper_task_running is False
-            gui.save_settings_button.config.assert_called_with(state="normal")
-
-        finally:
-            root.destroy()
+        # Test: set not busy
+        gui._set_wallpaper_busy(False)
+        assert gui._wallpaper_task_running is False
+        gui.save_settings_button.config.assert_called_with(state="normal")
 
     def test_finish_wallpaper_task_clears_state_and_calls_callback(self):
         """Verify _finish_wallpaper_task re-enables buttons and invokes callback."""
