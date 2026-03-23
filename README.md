@@ -152,7 +152,7 @@ pip install -r requirements.txt
 python build_exe.py
 ```
 
-Output: `LifeCalendar_Package/LifeCalendar.exe` (GUI) and `LifeCalendarUpdate.exe` (headless)
+Output: `LifeCalendar_Package/LifeCalendar.exe` (GUI + headless flags)
 
 ---
 
@@ -184,14 +184,14 @@ You can customize all wallpaper colors by editing the `palette` section in `life
 ```json
 {
   "palette": {
-    "title": "#f2f2f2",           // Main title text
-    "stats": "#9a9a9a",           // Statistics text
-    "subtitle": "#8a8a8a",        // Subtitle text
-    "legend": "#d6d6d6",          // Legend labels
-    "lived": "#cfcfcf",           // Completed units
-    "current": "#ffffff",         // Current unit
-    "future": "#3a3a3a",          // Future units
-    "current_progress": "#ffdd00"  // Progress highlight
+    "title": "#f2f2f2",
+    "stats": "#9a9a9a",
+    "subtitle": "#8a8a8a",
+    "legend": "#d6d6d6",
+    "lived": "#cfcfcf",
+    "current": "#ffffff",
+    "future": "#3a3a3a",
+    "current_progress": "#ffdd00"
   }
 }
 ```
@@ -215,13 +215,14 @@ All colors use **hex format** (e.g., `#ffffff` = white, `#000000` = black). Afte
     "wallpaper_refresh_enabled": true
   },
   "palette": {
-    "background": "#050505",
     "title": "#f2f2f2",
     "stats": "#9a9a9a",
-    "passed": "#cfcfcf",
+    "subtitle": "#8a8a8a",
+    "legend": "#d6d6d6",
+    "lived": "#cfcfcf",
     "current": "#ffffff",
     "future": "#3a3a3a",
-    "current_highlight": "#ffdd00"
+    "current_progress": "#ffdd00"
   },
   "opportunities": [
     {
@@ -248,7 +249,7 @@ All colors use **hex format** (e.g., `#ffffff` = white, `#000000` = black). Afte
 - Use YYYY-MM-DD format for all dates
 - Colours are hex codes (e.g., `#ffffff` for white, `#000000` for black)
 - Set `"visible": false` to hide an opportunity from the wallpaper
-- Set `"focus": true` to highlight one opportunity with the `current_highlight` color
+- Set `"focus": true` to highlight one opportunity with the `current_progress` color
 
 ---
 
@@ -268,7 +269,7 @@ python life_calendar_cli.py --install-win    # Requires admin privileges
 
 Or via the manual Task Scheduler GUI:
 1. Open Task Scheduler (press `Win+R`, type `taskschd.msc`)
-2. Import `LifeCalendar_Task.xml`, or create a new task to run `LifeCalendarUpdate.exe` daily at 00:01
+2. Import `LifeCalendar_Task.xml`, or create a new task to run `LifeCalendar.exe --headless-update` daily at 00:01
 
 ### Linux/macOS: Wallpaper not changing?
 
@@ -289,7 +290,6 @@ life_calendar/
 ├── requirements.txt          # Dependencies
 └── LifeCalendar_Package/     # Distribution folder (built by build_exe.py)
     ├── LifeCalendar.exe
-    ├── LifeCalendarUpdate.exe
     ├── life_calendar_config.json
     └── wallpaper.log
 ```
@@ -307,7 +307,7 @@ python build_exe.py
 
 ✅ Auto Task Scheduler registration (no INSTALL.bat needed)  
 ✅ Threading for non-freezing GUI  
-✅ Headless updater (`LifeCalendarUpdate.exe`)  
+✅ Headless updater mode (`LifeCalendar.exe --headless-update`)  
 ✅ Pure logging (no console prints)  
 ✅ Pixel-perfect rendering (no blur)  
 ✅ Config safety (missing keys won't crash)  

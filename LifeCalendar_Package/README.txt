@@ -28,8 +28,7 @@ QUICK START
 
 FILES INCLUDED
 ──────────────
-  LifeCalendar.exe         - GUI application (run anytime to change settings)
-  LifeCalendarUpdate.exe   - Auto-updater (runs silently at midnight)
+   LifeCalendar.exe         - Main app (GUI + headless update modes)
   life_calendar_config.json - Your saved settings
   LifeCalendar_Task.xml    - Task Scheduler config (for manual import)
   README.txt               - This file
@@ -63,8 +62,9 @@ If automatic scheduling isn't working, set up manually:
 4. Trigger: Daily
 5. Start time: 12:01 AM
 6. Action: Start a program
-7. Program: Browse to LifeCalendarUpdate.exe
-8. Finish
+7. Program: Browse to LifeCalendar.exe
+8. Add arguments: --headless-update
+9. Finish
 
 
 TROUBLESHOOTING

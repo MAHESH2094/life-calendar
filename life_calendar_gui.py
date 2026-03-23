@@ -1121,8 +1121,12 @@ class LifeCalendarGUI:
         if not dob:
             messagebox.showerror("Validation Error", "Date of birth is required.")
             return False
-        if safe_date(dob) is None:
+        dob_value = safe_date(dob)
+        if dob_value is None:
             messagebox.showerror("Invalid Date", "Date of birth must use YYYY-MM-DD.")
+            return False
+        if dob_value > datetime.now():
+            messagebox.showerror("Invalid Date", "Date of birth cannot be in the future.")
             return False
 
         lifespan_str = self.lifespan_entry.get().strip()
@@ -1442,7 +1446,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.headless_update:
         from auto_update import main as auto_update_main
 
-        return auto_update_main()
+        return auto_update_main([])
 
     force_today = False
     if args.startup_check:

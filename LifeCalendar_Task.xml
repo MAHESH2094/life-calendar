@@ -7,16 +7,16 @@
     - SCRIPT_PATH     → full path to auto_update.py (e.g. C:\life-calendar\auto_update.py)
     - WORKING_DIR     → folder containing auto_update.py (e.g. C:\life-calendar)
   
-  Or if using the EXE build, change the <Command> to LifeCalendarUpdate.exe path
-  and remove the <Arguments> line.
+  Or if using the EXE build, change the <Command> to LifeCalendar.exe path
+  and set <Arguments> to --headless-update.
   
-  IMPORT:  schtasks /Create /XML "LifeCalendar_Task.xml" /TN "LifeCalendarUpdate"
-  DELETE:  schtasks /Delete /TN "LifeCalendarUpdate" /F
+  IMPORT:  schtasks /Create /XML "LifeCalendar_Task.xml" /TN "LifeCalendarWallpaper"
+  DELETE:  schtasks /Delete /TN "LifeCalendarWallpaper" /F
 -->
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
     <Description>Life Calendar Wallpaper - Daily at midnight, on startup, and on wake/unlock</Description>
-    <URI>\LifeCalendarUpdate</URI>
+    <URI>\LifeCalendarWallpaper</URI>
   </RegistrationInfo>
 
   <!-- ==================== TRIGGERS ==================== -->
@@ -101,7 +101,8 @@
     <!--
       OPTION B: Running from EXE (uncomment below, comment out Option A)
       <Exec>
-        <Command>C:\path\to\LifeCalendarUpdate.exe</Command>
+        <Command>C:\path\to\LifeCalendar.exe</Command>
+        <Arguments>--headless-update</Arguments>
         <WorkingDirectory>C:\path\to\</WorkingDirectory>
       </Exec>
     -->

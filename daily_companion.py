@@ -119,7 +119,7 @@ def config_has_profile(config: dict[str, Any]) -> bool:
             lifespan = int(config.get("lifespan", 0))
         except (TypeError, ValueError):
             return False
-        return dob is not None and 1 <= lifespan <= 150
+        return dob is not None and dob <= date.today() and 1 <= lifespan <= 150
 
     if mode == "goal":
         start = safe_parse_date(config.get("goal_start", ""))
@@ -198,11 +198,11 @@ def get_today_metrics(config: dict[str, Any], on_date: Optional[date] = None) ->
         if start is None or end is None or end <= start:
             raise ValueError("Goal mode requires a valid start and end date")
 
-        total_days = max(1, (end - start).days)
+        total_days = max(1, (end - start).days + 1)
         if current_day < start:
             elapsed_days = 0
             day_number = 1
-            remaining_days = (end - current_day).days
+            remaining_days = max(0, (end - current_day).days + 1)
             emotional_line = "The countdown has not started yet. Use the runway well."
         elif current_day > end:
             elapsed_days = total_days
@@ -210,9 +210,9 @@ def get_today_metrics(config: dict[str, Any], on_date: Optional[date] = None) ->
             remaining_days = 0
             emotional_line = "The window has closed. Carry the lesson into what comes next."
         else:
-            elapsed_days = (current_day - start).days
-            day_number = min(total_days, elapsed_days + 1)
-            remaining_days = max(0, (end - current_day).days)
+            elapsed_days = (current_day - start).days + 1
+            day_number = min(total_days, elapsed_days)
+            remaining_days = max(0, (end - current_day).days + 1)
             emotional_line = "Progress rarely feels dramatic in the moment. Today still matters."
 
         progress_percent = round((elapsed_days / total_days) * 100, 1)

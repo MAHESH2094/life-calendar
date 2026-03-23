@@ -4,4 +4,4 @@
 # It ensures we run from the repo root so that relative paths work.
 # -------------------------------------------------
 cd "$(dirname "$(realpath "$0")")"
-python auto_update.py
+python3 auto_update.py

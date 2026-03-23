@@ -144,8 +144,8 @@ def _install_launchd() -> None:
         "Label": "com.lifecalendar.wallpaper",
         "ProgramArguments": [str(BASE_DIR / "cron_wrapper.sh")],
         "StartCalendarInterval": {
-            "Hour": 1,
-            "Minute": 0,
+            "Hour": 0,
+            "Minute": 1,
         },
         "StandardOutPath": str(BASE_DIR / "launchd.log"),
         "StandardErrorPath": str(BASE_DIR / "launchd.log"),

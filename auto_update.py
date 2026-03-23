@@ -44,11 +44,6 @@ def get_base_dir() -> Path:
 BASE_DIR = get_base_dir()
 
 
-# Add base dir to path for imports (only needed for Python script, not EXE)
-if not getattr(sys, 'frozen', False):
-    sys.path.insert(0, str(BASE_DIR))
-
-
 def needs_update() -> bool:
     """
     Check if wallpaper was already updated today.

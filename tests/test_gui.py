@@ -1,10 +1,8 @@
 """Tests for GUI entrypoint command modes."""
 
 import json
-import threading
-import time
 from datetime import date
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import life_calendar_gui
 
@@ -47,15 +45,16 @@ def test_startup_check_opens_today_view_when_missing_checkin(tmp_path):
 
 
 def test_headless_update_delegates_to_auto_update_main():
-    with patch("auto_update.main", return_value=7):
+    with patch("auto_update.main", return_value=7) as mock_auto_update:
         result = life_calendar_gui.main(["--headless-update"])
 
     assert result == 7
+    mock_auto_update.assert_called_once_with([])
 
 
 class TestGUIAsyncOperations:
     """Integration tests: verify GUI async mechanics for wallpaper operations.
-    
+
     These tests verify that the threading safeguards work correctly:
     - Buttons are disabled during wallpaper generation
     - Concurrent task submissions are rejected
@@ -70,7 +69,7 @@ class TestGUIAsyncOperations:
         # Create a real Tk window (headless on CI)
         root = tk.Tk()
         root.withdraw()  # Hide the window
-        
+
         try:
             # Create a minimal GUI object
             gui = MagicMock()
