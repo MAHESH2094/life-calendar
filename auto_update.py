@@ -26,6 +26,12 @@ def get_base_dir() -> Path:
     Get the base directory where config file is located.
     Works for both Python script and PyInstaller EXE.
     """
+    env_dir = os.getenv("LIFECALENDAR_DATA_DIR", "").strip()
+    if env_dir:
+        data_dir = Path(env_dir).expanduser()
+        data_dir.mkdir(parents=True, exist_ok=True)
+        return data_dir.absolute()
+
     if getattr(sys, 'frozen', False):
         # Running as PyInstaller EXE - config is in same folder as EXE
         return Path(sys.executable).parent.absolute()
@@ -76,32 +82,6 @@ def needs_update() -> bool:
     except OSError:
         # If we can't read/write timestamp, update anyway
         return True
-
-
-def _cleanup_stale_lock() -> None:
-    """
-    Remove lock file if it's older than 24 hours.
-    Prevents permanent hangs after a crash.
-    """
-    import time
-    import sys
-
-    lock_file = BASE_DIR / ".life_calendar.lock"
-    try:
-        if lock_file.exists():
-            age_seconds = time.time() - lock_file.stat().st_mtime
-            if age_seconds > 86400:  # 24 hours
-                lock_file.unlink()
-                sys.stderr.write("INFO: Removed stale lock file (>24 hours old)\n")
-    except OSError as e:
-        # Cleanup failure is non-critical; provide context for debugging
-        import errno
-        if e.errno == errno.EACCES:
-            sys.stderr.write(f"DEBUG: Permission denied accessing lock file: {e}\n")
-        elif e.errno == errno.ENOENT:
-            sys.stderr.write("DEBUG: Lock file already removed\n")
-        else:
-            sys.stderr.write(f"DEBUG: Could not clean up stale lock: {e}\n")
 
 
 def _wallpaper_recently_modified() -> bool:
@@ -163,18 +143,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    # Force correct working directory (critical for Task Scheduler)
-    # Only do this once in main()
-    try:
-        os.chdir(BASE_DIR)
-    except OSError as e:
-        # Cannot use logger yet - print to stderr instead
-        sys.stderr.write(f"ERROR: Cannot change directory to {BASE_DIR}: {e}\n")
-        return 1
-
     # Import here to catch ImportError and handle gracefully
     try:
-        from wallpaper_engine import WallpaperEngine, logger
+        from wallpaper_engine import WallpaperEngine, logger, force_release_lock
     except ImportError as e:
         sys.stderr.write(f"ERROR: Failed to import wallpaper_engine: {e}\n")
         sys.stderr.write("Solution: Run 'pip install -r requirements.txt'\n")
@@ -186,8 +157,17 @@ def main(argv: Optional[list[str]] = None) -> int:
     else:
         logger.info("Auto-update started")
 
-    # Clean up stale lock files (older than 24 hours)
-    _cleanup_stale_lock()
+    # Unified stale lock cleanup policy is implemented in wallpaper_engine.
+    # We do an optional pre-clean for obviously broken lock files only.
+    lock_file = BASE_DIR / ".life_calendar.lock"
+    if lock_file.exists():
+        try:
+            raw = lock_file.read_text(encoding="utf-8").strip()
+            if not raw:
+                force_release_lock("empty lock file")
+        except OSError:
+            # Best effort only; acquire_lock will handle hard failures.
+            pass
 
     # Check if already updated today (prevents duplicate updates from multiple triggers)
     if not needs_update():

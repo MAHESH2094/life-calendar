@@ -11,12 +11,13 @@ WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY . /app
 
-# Expose log file path via environment variable for volume-mounted configs
-ENV LOG_PATH=/app/config/wallpaper.log
+# Runtime state is stored in /app/data so compose can mount it safely.
+ENV LIFECALENDAR_DATA_DIR=/app/data
 
 # Run as non-root user for security
 RUN groupadd -g 1000 lifecal && \
     useradd -u 1000 -g lifecal -s /bin/bash lifecal && \
+    mkdir -p /app/data && \
     chown -R lifecal:lifecal /app
 USER lifecal
 

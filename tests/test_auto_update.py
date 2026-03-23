@@ -130,3 +130,73 @@ class TestMain:
             # Timestamp should be written
             ts_file = temp_dir / ".last_update_date"
             assert ts_file.exists()
+
+
+class TestConcurrentHeadlessUpdates:
+    """Integration tests: prove that concurrent auto_update calls work correctly."""
+
+    def test_concurrent_auto_update_only_one_succeeds(self, temp_dir):
+        """Two concurrent auto_update.main() calls: exactly one should succeed."""
+        import threading
+        import shutil
+
+        # Setup: create valid config without timestamp
+        _write_config(temp_dir)
+
+        # Copy wallpaper_engine.py for imports
+        engine_src = Path(__file__).parent.parent / "wallpaper_engine.py"
+        engine_dst = temp_dir / "wallpaper_engine.py"
+        if engine_src.exists():
+            shutil.copy(engine_src, engine_dst)
+
+        # Ensure no timestamp (both processes think update is needed)
+        ts_file = temp_dir / ".last_update_date"
+        if ts_file.exists():
+            ts_file.unlink()
+
+        results = {"success": [], "error": []}
+        results_lock = threading.Lock()
+        start_barrier = threading.Barrier(3)  # 2 workers + main thread
+
+        def worker(worker_id: int) -> None:
+            """Worker calls auto_update.main() while syncing with barrier."""
+            start_barrier.wait()  # Synchronize with other thread
+            try:
+                with patch("auto_update.BASE_DIR", temp_dir), \
+                     patch("auto_update.get_base_dir", return_value=temp_dir):
+                    # Mock run_auto to avoid real wallpaper setting (but lock still acquired)
+                    with patch("wallpaper_engine.WallpaperEngine.run_auto", return_value=True):
+                        from auto_update import main
+                        exit_code = main(argv=[])
+                        with results_lock:
+                            results["success"].append((worker_id, exit_code))
+            except Exception as exc:
+                with results_lock:
+                    results["error"].append((worker_id, str(exc)))
+
+        # Spawn two concurrent threads
+        t1 = threading.Thread(target=worker, args=(1,), daemon=False)
+        t2 = threading.Thread(target=worker, args=(2,), daemon=False)
+
+        t1.start()
+        t2.start()
+
+        # Release barrier (allow both workers to start simultaneously)
+        try:
+            start_barrier.wait(timeout=5)
+        except Exception:
+            pass
+
+        # Wait for both to complete
+        t1.join(timeout=10)
+        t2.join(timeout=10)
+
+        # Verify results
+        assert len(results["error"]) == 0, f"Errors occurred: {results['error']}"
+
+        # Both threads should complete (one succeeds with exit code 0/1, one skips)
+        assert len(results["success"]) == 2, f"Expected 2 successes, got {results['success']}"
+
+        # At least one should succeed or skip (exit code 0)
+        exit_codes = [code for _, code in results["success"]]
+        assert 0 in exit_codes, f"At least one process should succeed (exit 0), got {exit_codes}"

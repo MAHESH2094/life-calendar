@@ -10,6 +10,9 @@ life_calendar_wallpaper.png
 wallpaper.log
 wallpaper.log.*
 .life_calendar.lock
+.last_update_date
+.coverage
+daily_checkins.json
 
 # Config & backups
 life_calendar_config.json

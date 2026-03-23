@@ -1,9 +1,12 @@
 """Build the single-file Windows package for Life Calendar."""
 
+import json
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+from daily_companion import merge_config
 
 PROJECT_VERSION = "3.0.0"
 BASE_DIR = Path(__file__).parent.absolute()
@@ -118,7 +121,16 @@ def create_package() -> None:
     shutil.copy(exe_path, OUTPUT_DIR)
     print("[OK]     Copied LifeCalendar.exe")
 
-    for filename in ("life_calendar_config.json", "README.txt", "uninstall.py", "windows_automation.py"):
+    config_src = BASE_DIR / "life_calendar_config.json"
+    config_dst = OUTPUT_DIR / "life_calendar_config.json"
+    if config_src.exists():
+        shutil.copy(config_src, config_dst)
+        print("[OK]     Copied life_calendar_config.json")
+    else:
+        config_dst.write_text(json.dumps(merge_config(), indent=2), encoding="utf-8")
+        print("[OK]     Generated default life_calendar_config.json")
+
+    for filename in ("README.txt", "uninstall.py", "windows_automation.py"):
         src = BASE_DIR / filename
         if src.exists():
             shutil.copy(src, OUTPUT_DIR)

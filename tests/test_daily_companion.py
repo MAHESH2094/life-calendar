@@ -13,6 +13,13 @@ def test_merge_config_adds_automation_defaults():
     assert merged["automation"]["wallpaper_refresh_enabled"] is True
 
 
+def test_merge_config_backfills_partial_palette():
+    merged = merge_config({"palette": {"title": "#123456"}})
+    assert merged["palette"]["title"] == "#123456"
+    assert "current_progress" in merged["palette"]
+    assert "future" in merged["palette"]
+
+
 def test_life_metrics_use_day_count_and_weeks_remaining():
     metrics = get_today_metrics(
         {

@@ -13,11 +13,15 @@ import platform
 import ctypes
 import calendar
 import time
+import threading
 from abc import ABC, abstractmethod
 import logging
 from logging.handlers import RotatingFileHandler
+import re
 from typing import Tuple, List, Optional, Any
 import shutil
+import signal
+import atexit
 
 from daily_companion import get_today_metrics, merge_config
 
@@ -37,6 +41,12 @@ if platform.system() == "Windows":
 
 def get_base_dir() -> str:
     """Get base directory - works for both Python script and PyInstaller EXE"""
+    env_dir = os.getenv("LIFECALENDAR_DATA_DIR", "").strip()
+    if env_dir:
+        data_dir = os.path.abspath(os.path.expanduser(env_dir))
+        os.makedirs(data_dir, exist_ok=True)
+        return data_dir
+
     if getattr(sys, 'frozen', False):
         # Running as PyInstaller EXE
         return os.path.dirname(sys.executable)
@@ -48,6 +58,10 @@ def get_base_dir() -> str:
 BASE_DIR = get_base_dir()
 LOG_PATH = os.path.join(BASE_DIR, "wallpaper.log")
 LOCK_FILE = os.path.join(BASE_DIR, ".life_calendar.lock")
+DEFAULT_MAX_RUNTIME_MINUTES = 30
+
+# Ensure signal hooks are only installed once per process.
+_LOCK_SIGNAL_HOOKS_INSTALLED = False
 
 # -----------------------------------------------------------------------
 # Configuration constants
@@ -105,63 +119,178 @@ def _is_process_running(pid: int) -> bool:
             return False
 
 
-def acquire_lock() -> None:
-    """Acquire exclusive lock with PID verification and stale detection"""
-    # Check for existing lock
-    if os.path.exists(LOCK_FILE):
+def _get_lock_max_age_seconds() -> int:
+    """Return max lock age in seconds, configurable via env var."""
+    value = os.getenv("LIFECALENDAR_MAX_RUNTIME_MINUTES")
+    if value:
         try:
-            with open(LOCK_FILE, 'r') as f:
-                pid_str = f.read().strip()
-
-            # C1: Safely parse PID; treat non-numeric as corrupted
-            try:
-                old_pid = int(pid_str)
-            except ValueError:
-                logger.debug(f"Corrupted lock file (non-numeric PID: {pid_str}), removing")
-                os.remove(LOCK_FILE)
-                old_pid = None
-
-            if old_pid is not None:
-                # Check if old process is still running
-                if _is_process_running(old_pid):
-                    raise RuntimeError(f"Another LifeCalendar process is already running (PID: {old_pid})")
-                else:
-                    # Stale lock - check age; if >2 hours old, remove it
-                    lock_age = time.time() - os.path.getmtime(LOCK_FILE)
-                    if lock_age > 7200:  # 2 hours
-                        logger.warning(f"Removing stale lock from dead process (PID: {old_pid}, age: {lock_age/3600:.1f}h)")
-                        os.remove(LOCK_FILE)
-                    else:
-                        raise RuntimeError(f"Lock file present but process {old_pid} is dead (lock age: {lock_age/60:.0f}m). Possible concurrent run or recent crash.")
-        except (IOError, OSError) as e:
-            # Corrupted or inaccessible lock file - try to remove it
-            logger.debug(f"Could not read lock file: {e}")
-            try:
-                os.remove(LOCK_FILE)
-            except OSError:
-                pass
-
-    # Create new lock atomically
-    try:
-        fd = os.open(LOCK_FILE, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        os.write(fd, str(os.getpid()).encode())
-        os.close(fd)
-    except FileExistsError:
-        # Race condition - another process created it between our check and create
-        raise RuntimeError("Another LifeCalendar process is already running")
-    except OSError as e:
-        # C2: Permission denied or other OS-level errors
-        logger.error(f"Failed to create lock file: {e}")
-        raise RuntimeError(f"Cannot create lock file (permission issue or read-only directory): {e}")
+            minutes = int(value)
+            if minutes > 0:
+                return minutes * 60
+        except ValueError:
+            logger.warning(
+                "Invalid LIFECALENDAR_MAX_RUNTIME_MINUTES=%s, using default %s",
+                value,
+                DEFAULT_MAX_RUNTIME_MINUTES,
+            )
+    return DEFAULT_MAX_RUNTIME_MINUTES * 60
 
 
-def release_lock() -> None:
-    """Release lock file"""
+def _read_lock_info() -> dict[str, Any]:
+    """Read lock metadata from disk.
+
+    Supports both legacy lock files (PID as plain text) and JSON metadata.
+    """
+    with open(LOCK_FILE, "r", encoding="utf-8") as file_handle:
+        raw = file_handle.read().strip()
+
+    # Legacy format: plain PID
+    if raw.isdigit():
+        return {"pid": int(raw), "format": "legacy"}
+
+    # Current format: JSON
+    payload = json.loads(raw)
+    if not isinstance(payload, dict):
+        raise ValueError("Lock payload must be an object")
+    return payload
+
+
+def _write_lock_info(fd: int) -> None:
+    """Write JSON lock metadata to an already-created lock file descriptor."""
+    payload = {
+        "pid": os.getpid(),
+        "created_at": time.time(),
+        "host": platform.node() or "unknown",
+        "version": 1,
+    }
+    os.write(fd, json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+
+
+def _remove_lock_file(reason: str) -> None:
+    """Remove lock file and log the reason."""
     try:
         if os.path.exists(LOCK_FILE):
             os.remove(LOCK_FILE)
-    except Exception as e:
-        logger.debug(f"Could not clean up lock file: {e}")
+            logger.warning("Removed lock file: %s", reason)
+    except OSError as exc:
+        logger.warning("Failed to remove lock file (%s): %s", reason, exc)
+
+
+def install_lock_signal_handlers() -> None:
+    """Install signal and exit hooks so locks are cleaned up on termination."""
+    global _LOCK_SIGNAL_HOOKS_INSTALLED
+    if _LOCK_SIGNAL_HOOKS_INSTALLED:
+        return
+
+    if threading.current_thread() is not threading.main_thread():
+        return
+
+    def _handle_exit_signal(signum: int, _frame: Any) -> None:
+        logger.warning("Received signal %s, releasing lock", signum)
+        release_lock()
+        raise SystemExit(128 + signum)
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            signal.signal(sig, _handle_exit_signal)
+        except (ValueError, OSError):
+            # Not available on every platform/runtime context.
+            continue
+
+    atexit.register(release_lock)
+    _LOCK_SIGNAL_HOOKS_INSTALLED = True
+
+
+def force_release_lock(reason: str = "manual force release") -> bool:
+    """Force-remove lock file for recovery operations."""
+    if os.path.exists(LOCK_FILE):
+        _remove_lock_file(reason)
+        return True
+    return False
+
+
+def acquire_lock() -> None:
+    """Acquire exclusive lock with PID verification and stale detection."""
+    install_lock_signal_handlers()
+
+    for _attempt in range(2):
+        # Create new lock atomically first (fast path).
+        try:
+            fd = os.open(LOCK_FILE, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            try:
+                _write_lock_info(fd)
+            finally:
+                os.close(fd)
+            logger.info("Lock acquired (PID: %s)", os.getpid())
+            return
+        except FileExistsError:
+            pass
+        except OSError as exc:
+            logger.error("Failed to create lock file: %s", exc)
+            raise RuntimeError(f"Cannot create lock file (permission issue or read-only directory): {exc}") from exc
+
+        # Slow path: inspect and decide whether existing lock is stale.
+        try:
+            lock_info = _read_lock_info()
+            lock_pid = int(lock_info.get("pid"))
+            lock_age_seconds = max(0.0, time.time() - os.path.getmtime(LOCK_FILE))
+            max_age_seconds = _get_lock_max_age_seconds()
+
+            if not _is_process_running(lock_pid):
+                _remove_lock_file(
+                    f"stale lock from dead process PID {lock_pid} (age {lock_age_seconds:.1f}s)"
+                )
+                continue
+
+            # Running process: do not remove lock. Report age for diagnostics.
+            if lock_age_seconds > max_age_seconds:
+                raise RuntimeError(
+                    "Another LifeCalendar process is already running "
+                    f"(PID: {lock_pid}, age: {lock_age_seconds / 60:.0f}m, "
+                    f"max_runtime: {max_age_seconds / 60:.0f}m)."
+                )
+
+            raise RuntimeError(
+                "Another LifeCalendar process is already running "
+                f"(PID: {lock_pid}, age: {lock_age_seconds / 60:.0f}m)."
+            )
+
+        except (ValueError, json.JSONDecodeError, OSError) as exc:
+            # Corrupted lock file: remove once, then retry acquisition.
+            _remove_lock_file(f"corrupted or unreadable lock ({exc})")
+            continue
+
+    raise RuntimeError("Another LifeCalendar process is already running")
+
+
+def release_lock() -> None:
+    """Release lock file owned by current process.
+
+    Legacy lock files (plain PID text) are also supported for cleanup.
+    """
+    try:
+        if not os.path.exists(LOCK_FILE):
+            return
+
+        try:
+            lock_info = _read_lock_info()
+            lock_pid = int(lock_info.get("pid"))
+        except (ValueError, json.JSONDecodeError, OSError):
+            # Corrupted lock: best effort cleanup.
+            os.remove(LOCK_FILE)
+            return
+
+        if lock_pid == os.getpid():
+            os.remove(LOCK_FILE)
+            logger.info("Lock released (PID: %s)", os.getpid())
+        else:
+            logger.debug(
+                "Skipping lock release because owner PID %s != current PID %s",
+                lock_pid,
+                os.getpid(),
+            )
+    except Exception as exc:
+        logger.debug(f"Could not clean up lock file: {exc}")
 
 
 # ==================== HELPER FUNCTIONS ====================
@@ -323,14 +452,14 @@ class GoalCalendarData(CalendarData):
         # Always use current time - never cache
         now = datetime.now().date()
 
-        total_days = (self.end.date() - self.start.date()).days
+        total_days = (self.end.date() - self.start.date()).days + 1
 
         if now < self.start.date():
             passed_days = 0
         elif now > self.end.date():
             passed_days = total_days
         else:
-            passed_days = (now - self.start.date()).days
+            passed_days = (now - self.start.date()).days + 1
 
         percentage = round((passed_days / total_days) * 100, 1) if total_days > 0 else 0
         stats = f"Goal Progress: {passed_days} of {total_days} days ({percentage}%)"
@@ -632,7 +761,12 @@ class WallpaperRenderer:
         try:
             # optimize=True reduces file size significantly
             self.img.save(temp_path, 'PNG', optimize=True)
-            os.replace(temp_path, path)
+            try:
+                os.replace(temp_path, path)
+            except OSError as exc:
+                # Cross-device writes can fail when temp and destination mount differ.
+                logger.debug(f"os.replace failed ({exc}); falling back to shutil.move")
+                shutil.move(temp_path, path)
 
             # Verify file was created successfully
             if not os.path.exists(path):
@@ -697,6 +831,24 @@ class WallpaperEngine:
 
         if width < 800 or height < 600:
             raise ValueError("Resolution must be at least 800x600")
+        if width > 7680 or height > 4320:
+            raise ValueError("Resolution must be at most 7680x4320")
+
+        # Palette validation - fail fast on malformed or partial palettes.
+        palette = self.config.get("palette")
+        if not isinstance(palette, dict):
+            raise ValueError("Palette must be an object with required color keys")
+
+        required_palette_keys = set(self.DEFAULT_CONFIG["palette"].keys())
+        missing_keys = sorted(required_palette_keys - set(palette.keys()))
+        if missing_keys:
+            raise ValueError(f"Palette is missing required keys: {', '.join(missing_keys)}")
+
+        hex_color = re.compile(r"^#[0-9a-fA-F]{6}$")
+        for key in required_palette_keys:
+            value = palette.get(key)
+            if not isinstance(value, str) or not hex_color.match(value):
+                raise ValueError(f"Palette value for '{key}' must be a hex color like #AABBCC")
 
         # Mode-specific validation
         if mode == 'life':
@@ -975,19 +1127,12 @@ class WallpaperEngine:
                 success = result.returncode == 0
 
             else:
-                # Fallback 1: Try xdg-desktop-portal (modern standardized method)
-                if shutil.which("gdbus"):
-                    logger.info("Trying xdg-desktop-portal (standardized wallpaper method)")
-                    command_used = "xdg-desktop-portal"
-                    result = subprocess.run(
-                        ['gdbus', 'call', '--session', '--dest', 'org.freedesktop.portal.Desktop',
-                         '--object-path', '/org/freedesktop/portal/desktop',
-                         '--method', 'org.freedesktop.portal.Settings.Read',
-                         's', 'org.freedesktop.appearance', 's', 'wallpaper-image-uri'],
-                        capture_output=True
-                    )
-                    if result.returncode == 0:
-                        success = True
+                # Fallback 1: Try xwallpaper (common X11 method)
+                if shutil.which("xwallpaper"):
+                    logger.info("Trying xwallpaper fallback")
+                    command_used = "xwallpaper"
+                    result = subprocess.run(['xwallpaper', '--zoom', abs_path], capture_output=True)
+                    success = result.returncode == 0
 
                 # Fallback 2: Try feh (universal window manager solution)
                 if not success and shutil.which("feh"):
@@ -996,10 +1141,17 @@ class WallpaperEngine:
                     result = subprocess.run(['feh', '--bg-scale', abs_path], capture_output=True)
                     success = result.returncode == 0
 
-                # Fallback 3: If all else fails, inform user
+                # Fallback 3: Try nitrogen if installed
+                if not success and shutil.which("nitrogen"):
+                    logger.info("Trying nitrogen fallback")
+                    command_used = "nitrogen"
+                    result = subprocess.run(['nitrogen', '--set-zoom-fill', '--save', abs_path], capture_output=True)
+                    success = result.returncode == 0
+
+                # Fallback 4: If all else fails, inform user
                 if not success:
-                    logger.error("No supported wallpaper method found. Install one of: feh, gdbus, or a desktop environment (GNOME/KDE/XFCE/MATE/Cinnamon)")
-                    return False, "No supported wallpaper command found - install feh or a supported desktop environment"
+                    logger.error("No supported wallpaper method found. Install one of: xwallpaper, feh, nitrogen, or a supported desktop environment (GNOME/KDE/XFCE/MATE/Cinnamon)")
+                    return False, "No supported wallpaper command found - install xwallpaper/feh/nitrogen or use a supported desktop environment"
 
             if success:
                 logger.info(f"Wallpaper set successfully on Linux using {command_used}")

@@ -97,7 +97,8 @@ class TestInstallCron:
 
         # Simulate existing crontab that already contains our line
         import shlex
-        cron_line = f"1 0 * * * {shlex.quote(str(wrapper))} >> {temp_dir}/cron.log 2>&1"
+        log_path = shlex.quote(str(temp_dir / "cron.log"))
+        cron_line = f"1 0 * * * {shlex.quote(str(wrapper))} >> {log_path} 2>&1"
         mock_check.return_value = cron_line.encode()
 
         with patch("life_calendar_cli.BASE_DIR", temp_dir):
@@ -161,4 +162,12 @@ class TestMainEntrypoint:
             from life_calendar_cli import _run_once
             with pytest.raises(SystemExit) as exc_info:
                 _run_once()
+            assert exc_info.value.code == 0
+
+    def test_release_lock_exits_zero(self):
+        """--release-lock helper should exit successfully when no lock exists."""
+        with patch("life_calendar_cli.force_release_lock", return_value=False):
+            from life_calendar_cli import _release_lock
+            with pytest.raises(SystemExit) as exc_info:
+                _release_lock()
             assert exc_info.value.code == 0

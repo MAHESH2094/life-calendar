@@ -95,6 +95,8 @@ def merge_config(loaded: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     for key, value in loaded.items():
         if key == "automation" and isinstance(value, dict):
             merged["automation"].update(value)
+        elif key == "palette" and isinstance(value, dict):
+            merged["palette"].update(value)
         else:
             merged[key] = value
 
@@ -371,11 +373,12 @@ class DailyCheckinStore:
         note: str,
         checkin_day: Optional[date] = None,
         current_time: Optional[datetime] = None,
+        max_note_length: int = MAX_NOTE_LENGTH,
     ) -> CheckinResult:
         current_day = checkin_day or date.today()
         key = current_day.isoformat()
         normalized_mood = normalize_mood(mood)
-        normalized_note = normalize_note(note)
+        normalized_note = normalize_note(note, max_length=max_note_length)
         timestamp = current_time or datetime.now().astimezone()
 
         updated_existing = key in self._data["entries"]

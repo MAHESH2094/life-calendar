@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from daily_companion import merge_config
-from wallpaper_engine import WallpaperEngine
+from wallpaper_engine import WallpaperEngine, force_release_lock
 
 BASE_DIR = Path(__file__).parent.absolute()
 CONFIG_PATH = BASE_DIR / "life_calendar_config.json"
@@ -33,6 +33,16 @@ def _run_once() -> None:
     sys.exit(0 if ok else 1)
 
 
+def _release_lock() -> None:
+    """Force-release the lock file for recovery scenarios."""
+    released = force_release_lock("manual CLI release-lock")
+    if released:
+        print("Lock file released.")
+    else:
+        print("No lock file found.")
+    sys.exit(0)
+
+
 def _install_cron(cron_time: str = "1 0 * * *") -> None:
     """Install a nightly cron job on Linux or macOS."""
     if platform.system() == "Windows":
@@ -44,7 +54,8 @@ def _install_cron(cron_time: str = "1 0 * * *") -> None:
         print(f"ERROR: {wrapper} not found. Please ensure cron_wrapper.sh is in the repo.")
         sys.exit(1)
 
-    cron_line = f"{cron_time} {shlex.quote(str(wrapper))} >> {BASE_DIR}/cron.log 2>&1"
+    log_path = shlex.quote(str(BASE_DIR / "cron.log"))
+    cron_line = f"{cron_time} {shlex.quote(str(wrapper))} >> {log_path} 2>&1"
     try:
         existing = subprocess.check_output(["crontab", "-l"], stderr=subprocess.DEVNULL).decode()
     except FileNotFoundError:
@@ -96,6 +107,9 @@ def _install_windows_task() -> None:
             "wallpaper_refresh_enabled": True,
         }
 
+        with open(config_file, "w", encoding="utf-8") as file_handle:
+            json.dump(config, file_handle, indent=2)
+
         success, errors = sync_windows_tasks(config, BASE_DIR)
         if success:
             print("Windows Task Scheduler entries created successfully!")
@@ -132,7 +146,6 @@ def _install_launchd() -> None:
         "StartCalendarInterval": {
             "Hour": 1,
             "Minute": 0,
-            "Weekday": 0,
         },
         "StandardOutPath": str(BASE_DIR / "launchd.log"),
         "StandardErrorPath": str(BASE_DIR / "launchd.log"),
@@ -174,6 +187,7 @@ def main() -> None:
     parser.add_argument("--install-launchd", action="store_true", help="Create a macOS LaunchAgent")
     parser.add_argument("--install-win", action="store_true", help="Create a Windows Task Scheduler entry")
     parser.add_argument("--run-once", action="store_true", help="Generate and set wallpaper once")
+    parser.add_argument("--release-lock", action="store_true", help="Force-remove stale lock file")
     args = parser.parse_args()
 
     _ensure_config()
@@ -186,6 +200,8 @@ def main() -> None:
         _install_windows_task()
     elif args.run_once:
         _run_once()
+    elif args.release_lock:
+        _release_lock()
     else:
         parser.print_help()
 

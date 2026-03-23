@@ -35,7 +35,16 @@ def make_config(mode, **overrides):
         "resolution_width": 1920,
         "resolution_height": 1080,
         "config_version": 4,
-        "palette": {},
+        "palette": {
+            "title": "#f2f2f2",
+            "stats": "#9a9a9a",
+            "subtitle": "#8a8a8a",
+            "legend": "#d6d6d6",
+            "lived": "#cfcfcf",
+            "current": "#ffffff",
+            "future": "#3a3a3a",
+            "current_progress": "#ffdd00",
+        },
         "opportunities": [],
         "automation": {
             "startup_enabled": True,
@@ -163,7 +172,7 @@ class TestGoalCalendarData:
     def test_basic_goal(self):
         gcd = GoalCalendarData("2025-01-01", "2025-12-31", "My Goal")
         total, filled, stats = gcd.calculate()
-        assert total == 364  # 365 - 1 = difference in days
+        assert total == 365  # inclusive end date
         assert "Goal Progress" in stats
 
     def test_future_goal(self):
@@ -184,7 +193,7 @@ class TestGoalCalendarData:
         """Start and end 1 day apart."""
         gcd = GoalCalendarData("2025-06-01", "2025-06-02", "One Day")
         total, filled, _ = gcd.calculate()
-        assert total == 1
+        assert total == 2
 
     def test_end_before_start_raises(self):
         with pytest.raises(ValueError, match="End date must be after start date"):
@@ -307,6 +316,26 @@ class TestConfigValidation:
         cfg_path = write_config(temp_dir, make_config("life", resolution_width=400, resolution_height=300))
         engine = WallpaperEngine(cfg_path)
         with pytest.raises(ValueError, match="at least 800x600"):
+            engine.validate_config()
+
+    def test_resolution_too_large(self, temp_dir):
+        cfg_path = write_config(temp_dir, make_config("life", resolution_width=9000, resolution_height=5000))
+        engine = WallpaperEngine(cfg_path)
+        with pytest.raises(ValueError, match="at most 7680x4320"):
+            engine.validate_config()
+
+    def test_palette_missing_required_keys(self, temp_dir):
+        cfg_path = write_config(temp_dir, make_config("life", palette={"title": "#ffffff"}))
+        engine = WallpaperEngine(cfg_path)
+        # merge_config now backfills missing palette keys from defaults.
+        engine.validate_config()
+
+    def test_palette_invalid_hex_value(self, temp_dir):
+        bad_palette = make_config("life")["palette"]
+        bad_palette["title"] = "not-a-color"
+        cfg_path = write_config(temp_dir, make_config("life", palette=bad_palette))
+        engine = WallpaperEngine(cfg_path)
+        with pytest.raises(ValueError, match="must be a hex color"):
             engine.validate_config()
 
     def test_valid_goal_config(self, temp_dir):

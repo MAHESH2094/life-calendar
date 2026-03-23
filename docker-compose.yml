@@ -5,8 +5,8 @@ services:
     container_name: life-calendar
     restart: unless-stopped
     volumes:
-      # The host folder holds the config, log and generated PNG.
-      # Use ./data for persistent storage across container rebuilds.
-      - ./data:/app
+      # Persist runtime state without hiding application code in /app.
+      - ./data:/app/data
     environment:
       - TZ=America/New_York   # adjust to your timezone if needed
+      - LIFECALENDAR_DATA_DIR=/app/data

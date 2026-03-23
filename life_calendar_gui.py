@@ -10,9 +10,10 @@ import os
 import platform
 import shutil
 import sys
+import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
-from typing import Any
+from typing import Any, Callable
 
 from daily_companion import (
     DailyCheckinStore,
@@ -64,14 +65,28 @@ class LifeCalendarGUI:
         "bg_tertiary": "#141414",     # Panel background
         "bg_nav": "#050505",          # Navigation bar
         "bg_nav_active": "#1f2d21",   # Active nav button (dark green)
+        "bg_nav_active_settings": "#1f2731",
         "bg_nav_inactive": "#151515", # Inactive nav area
         "text_primary": "#f2f2f2",    # Main text
         "text_secondary": "#a0a0a0",  # Secondary text
+        "text_soft": "#d8d8d8",
+        "text_info": "#a6b7d1",
+        "text_hint": "#7c8799",
+        "text_note_counter": "#6f7f96",
         "text_muted": "#6a6a6a",      # Muted/disabled text
         "border": "#2a2a2a",          # Borders
         "accent_success": "#4caf50",  # Success (green)
+        "accent_success_soft": "#88c090",
         "accent_warning": "#ff9800",  # Warning (orange)
         "accent_error": "#f44336",    # Error (red)
+        "button_secondary": "#181818",
+        "button_secondary_active": "#202020",
+        "button_primary": "#244029",
+        "button_primary_active": "#2d4f33",
+        "input_bg": "#0b0b0b",
+        "status_default": "#64748b",
+        "status_warning": "#d6b36d",
+        "status_success": "#8fd68f",
     }
 
     RESOLUTION_PRESETS = {
@@ -101,7 +116,12 @@ class LifeCalendarGUI:
         self.checkin_store = DailyCheckinStore(BASE_DIR)
         self.current_view = "today"
         self._normalizing_note = False
+        self._note_update_job: str | None = None
+        self._wallpaper_task_running = False
         self.automation_warning = ""
+        self.save_settings_button: tk.Button | None = None
+        self.preview_button: tk.Button | None = None
+        self.refresh_button: tk.Button | None = None
 
         self.load_config()
         self.create_ui()
@@ -128,15 +148,17 @@ class LifeCalendarGUI:
         except (json.JSONDecodeError, OSError):
             self.config = merge_config()
 
-    def save_config(self) -> None:
+    def save_config(self) -> bool:
         """Persist the migrated config and keep a simple backup."""
         try:
             if os.path.exists(self.config_file):
                 shutil.copy(self.config_file, self.config_file + ".bak")
             with open(self.config_file, "w", encoding="utf-8") as file_handle:
                 json.dump(self.config, file_handle, indent=2)
+            return True
         except OSError as exc:
             messagebox.showerror("Error", f"Failed to save config: {exc}")
+            return False
 
     def create_ui(self) -> None:
         """Create the dashboard and settings views."""
@@ -255,8 +277,8 @@ class LifeCalendarGUI:
             card,
             text="",
             font=("Arial", 12),
-            bg="#101010",
-            fg="#d8d8d8",
+            bg=self.COLORS["bg_secondary"],
+            fg=self.COLORS["text_soft"],
         )
         self.today_stat_two_label.pack(anchor="w", padx=28, pady=(2, 16))
 
@@ -264,8 +286,8 @@ class LifeCalendarGUI:
             card,
             text="",
             font=("Arial", 11, "bold"),
-            bg="#101010",
-            fg="#88c090",
+            bg=self.COLORS["bg_secondary"],
+            fg=self.COLORS["accent_success_soft"],
         )
         self.today_streak_label.pack(anchor="w", padx=28)
 
@@ -273,8 +295,8 @@ class LifeCalendarGUI:
             card,
             text="",
             font=("Arial", 12),
-            bg="#101010",
-            fg="#a6b7d1",
+            bg=self.COLORS["bg_secondary"],
+            fg=self.COLORS["text_info"],
             wraplength=560,
             justify="left",
         )
@@ -284,24 +306,24 @@ class LifeCalendarGUI:
             card,
             text="",
             font=("Arial", 10),
-            bg="#101010",
-            fg="#7c8799",
+            bg=self.COLORS["bg_secondary"],
+            fg=self.COLORS["text_hint"],
         )
         self.today_checkin_state_label.pack(anchor="w", padx=28, pady=(0, 18))
 
-        mood_frame = tk.Frame(card, bg="#101010")
+        mood_frame = tk.Frame(card, bg=self.COLORS["bg_secondary"])
         mood_frame.pack(anchor="w", padx=28, pady=(0, 12))
 
         tk.Label(
             mood_frame,
             text="Mood",
             font=("Arial", 10, "bold"),
-            bg="#101010",
-            fg="#f2f2f2",
+            bg=self.COLORS["bg_secondary"],
+            fg=self.COLORS["text_primary"],
         ).pack(anchor="w", pady=(0, 8))
 
         self.mood_var = tk.StringVar(value="neutral")
-        buttons_frame = tk.Frame(mood_frame, bg="#101010")
+        buttons_frame = tk.Frame(mood_frame, bg=self.COLORS["bg_secondary"])
         buttons_frame.pack(anchor="w")
         for mood_key, mood_label in self.MOOD_OPTIONS:
             tk.Radiobutton(
@@ -324,15 +346,15 @@ class LifeCalendarGUI:
                 cursor="hand2",
             ).pack(side="left", padx=(0, 10))
 
-        note_frame = tk.Frame(card, bg="#101010")
+        note_frame = tk.Frame(card, bg=self.COLORS["bg_secondary"])
         note_frame.pack(fill="x", padx=28, pady=(8, 0))
 
         tk.Label(
             note_frame,
             text="What did you do today?",
             font=("Arial", 10, "bold"),
-            bg="#101010",
-            fg="#f2f2f2",
+            bg=self.COLORS["bg_secondary"],
+            fg=self.COLORS["text_primary"],
         ).pack(anchor="w", pady=(0, 8))
 
         self.note_var = tk.StringVar()
@@ -341,11 +363,11 @@ class LifeCalendarGUI:
             note_frame,
             textvariable=self.note_var,
             font=("Arial", 11),
-            bg="#0b0b0b",
-            fg="#f2f2f2",
+            bg=self.COLORS["input_bg"],
+            fg=self.COLORS["text_primary"],
             relief="flat",
             bd=6,
-            insertbackground="#f2f2f2",
+            insertbackground=self.COLORS["text_primary"],
         )
         self.note_entry.pack(fill="x")
 
@@ -353,21 +375,21 @@ class LifeCalendarGUI:
             note_frame,
             text=f"0/{MAX_NOTE_LENGTH}",
             font=("Arial", 9),
-            bg="#101010",
-            fg="#6f7f96",
+            bg=self.COLORS["bg_secondary"],
+            fg=self.COLORS["text_note_counter"],
         )
         self.note_counter_label.pack(anchor="e", pady=(6, 0))
 
-        action_frame = tk.Frame(card, bg="#101010")
+        action_frame = tk.Frame(card, bg=self.COLORS["bg_secondary"])
         action_frame.pack(anchor="w", padx=28, pady=(24, 28))
 
         self.checkin_button = tk.Button(
             action_frame,
             text="Check in for today",
             font=("Arial", 12, "bold"),
-            bg="#244029",
-            fg="#f2f2f2",
-            activebackground="#2d4f33",
+            bg=self.COLORS["button_primary"],
+            fg=self.COLORS["text_primary"],
+            activebackground=self.COLORS["button_primary_active"],
             relief="flat",
             bd=0,
             padx=24,
@@ -377,28 +399,29 @@ class LifeCalendarGUI:
         )
         self.checkin_button.pack(side="left", padx=(0, 10))
 
-        tk.Button(
+        self.refresh_button = tk.Button(
             action_frame,
             text="Refresh wallpaper now",
             font=("Arial", 10),
-            bg="#181818",
-            fg="#d5d5d5",
-            activebackground="#202020",
+            bg=self.COLORS["button_secondary"],
+            fg=self.COLORS["text_soft"],
+            activebackground=self.COLORS["button_secondary_active"],
             relief="flat",
             bd=0,
             padx=18,
             pady=12,
             cursor="hand2",
             command=self.refresh_wallpaper_now,
-        ).pack(side="left", padx=(0, 10))
+        )
+        self.refresh_button.pack(side="left", padx=(0, 10))
 
         tk.Button(
             action_frame,
             text="Open Settings",
             font=("Arial", 10),
-            bg="#181818",
-            fg="#d5d5d5",
-            activebackground="#202020",
+            bg=self.COLORS["button_secondary"],
+            fg=self.COLORS["text_soft"],
+            activebackground=self.COLORS["button_secondary_active"],
             relief="flat",
             bd=0,
             padx=18,
@@ -471,12 +494,12 @@ class LifeCalendarGUI:
         actions = tk.Frame(card, bg="#101010")
         actions.pack(fill="x", padx=28, pady=(0, 26))
 
-        tk.Button(
+        self.save_settings_button = tk.Button(
             actions,
             text="Save settings & activate",
             font=("Arial", 11, "bold"),
             bg="#2e4c35",
-            fg="#f2f2f2",
+            fg=self.COLORS["text_primary"],
             activebackground="#386040",
             relief="flat",
             bd=0,
@@ -484,22 +507,24 @@ class LifeCalendarGUI:
             pady=12,
             cursor="hand2",
             command=self.save_settings_and_activate,
-        ).pack(side="left", padx=(0, 10))
+        )
+        self.save_settings_button.pack(side="left", padx=(0, 10))
 
-        tk.Button(
+        self.preview_button = tk.Button(
             actions,
             text="Preview",
             font=("Arial", 10),
-            bg="#181818",
-            fg="#d5d5d5",
-            activebackground="#202020",
+            bg=self.COLORS["button_secondary"],
+            fg=self.COLORS["text_soft"],
+            activebackground=self.COLORS["button_secondary_active"],
             relief="flat",
             bd=0,
             padx=18,
             pady=12,
             cursor="hand2",
             command=self.preview_wallpaper,
-        ).pack(side="left", padx=(0, 10))
+        )
+        self.preview_button.pack(side="left", padx=(0, 10))
 
         self.retry_automation_button = tk.Button(
             actions,
@@ -616,7 +641,7 @@ class LifeCalendarGUI:
         tk.Label(
             self.year_frame,
             text="Year Progress",
-            font=("Arial", 11, "bold"),
+            font=("Arial", 12, "bold"),
             bg="#141414",
             fg="#f2f2f2",
         ).pack(anchor="w", pady=(0, 10))
@@ -918,9 +943,17 @@ class LifeCalendarGUI:
         self.height_entry.insert(0, str(height))
 
     def on_note_change(self, *_args: Any) -> None:
-        """Keep the daily note to one line and max length from config."""
+        """Debounce note normalization to avoid work on every keystroke."""
         if self._normalizing_note:
             return
+
+        if self._note_update_job is not None:
+            self.root.after_cancel(self._note_update_job)
+        self._note_update_job = self.root.after(75, self._apply_note_normalization)
+
+    def _apply_note_normalization(self) -> None:
+        """Keep the daily note to one line and max length from config."""
+        self._note_update_job = None
 
         max_length = self.config.get("max_note_length", MAX_NOTE_LENGTH)
         raw_note = self.note_var.get().replace("\r", " ").replace("\n", " ")
@@ -946,24 +979,67 @@ class LifeCalendarGUI:
             self.settings_view.pack(fill="both", expand=True)
 
         self.today_nav_btn.config(
-            bg="#1f2d21" if view_name == "today" else "#151515",
+            bg=self.COLORS["bg_nav_active"] if view_name == "today" else self.COLORS["bg_nav_inactive"],
             fg="#dff4e0" if view_name == "today" else "#c9c9c9",
             font=("Arial", 10, "bold") if view_name == "today" else ("Arial", 10),
         )
         self.settings_nav_btn.config(
-            bg="#1f2731" if view_name == "settings" else "#151515",
+            bg=self.COLORS["bg_nav_active_settings"] if view_name == "settings" else self.COLORS["bg_nav_inactive"],
             fg="#dbe7f8" if view_name == "settings" else "#c9c9c9",
             font=("Arial", 10, "bold") if view_name == "settings" else ("Arial", 10),
         )
 
     def set_status(self, message: str, warning: bool = False, success: bool = False) -> None:
         """Update the status line."""
-        color = "#64748b"
+        color = self.COLORS["status_default"]
         if warning:
-            color = "#d6b36d"
+            color = self.COLORS["status_warning"]
         elif success:
-            color = "#8fd68f"
+            color = self.COLORS["status_success"]
         self.status_label.config(text=message, fg=color)
+
+    def _set_wallpaper_busy(self, busy: bool) -> None:
+        """Disable wallpaper action buttons while a generation task is running."""
+        self._wallpaper_task_running = busy
+        state = "disabled" if busy else "normal"
+        for button in (self.save_settings_button, self.preview_button, self.refresh_button):
+            if button is not None:
+                button.config(state=state)
+
+    def _run_wallpaper_task(
+        self,
+        status_message: str,
+        worker: Callable[[], Any],
+        on_done: Callable[[Any, Exception | None], None],
+    ) -> None:
+        """Run wallpaper generation in a worker thread to keep UI responsive."""
+        if self._wallpaper_task_running:
+            self.set_status("A wallpaper task is already running. Please wait.", warning=True)
+            return
+
+        self._set_wallpaper_busy(True)
+        self.set_status(status_message)
+
+        def run_worker() -> None:
+            result: Any = None
+            error: Exception | None = None
+            try:
+                result = worker()
+            except Exception as exc:  # noqa: BLE001 - bubble to main thread handler
+                error = exc
+            self.root.after(0, lambda: self._finish_wallpaper_task(result, error, on_done))
+
+        threading.Thread(target=run_worker, daemon=True).start()
+
+    def _finish_wallpaper_task(
+        self,
+        result: Any,
+        error: Exception | None,
+        on_done: Callable[[Any, Exception | None], None],
+    ) -> None:
+        """Finalize async wallpaper task on the main thread."""
+        self._set_wallpaper_busy(False)
+        on_done(result, error)
 
     def update_automation_status(self) -> None:
         """Show current automation messaging."""
@@ -1095,6 +1171,9 @@ class LifeCalendarGUI:
         if width < 800 or height < 600:
             messagebox.showerror("Resolution Error", "Resolution must be at least 800x600.")
             return False
+        if width > 7680 or height > 4320:
+            messagebox.showerror("Resolution Error", "Resolution must be at most 7680x4320.")
+            return False
 
         self.config["resolution_width"] = width
         self.config["resolution_height"] = height
@@ -1140,19 +1219,25 @@ class LifeCalendarGUI:
         if not self._sync_config_from_ui():
             return
 
-        self.save_config()
-        self.set_status("Generating wallpaper and applying setup...")
-        self.root.update_idletasks()
+        if not self.save_config():
+            self.set_status("Unable to save config. Wallpaper update cancelled.", warning=True)
+            return
+        self._run_wallpaper_task(
+            "Generating wallpaper and applying setup...",
+            worker=lambda: WallpaperEngine(self.config_file).run_auto(),
+            on_done=self._on_save_settings_complete,
+        )
 
-        try:
-            engine = WallpaperEngine(self.config_file)
-            if not engine.run_auto():
-                messagebox.showerror("Error", "Failed to generate or set the wallpaper. Check wallpaper.log.")
-                self.set_status("Wallpaper generation failed.", warning=True)
-                return
-        except Exception as exc:
-            messagebox.showerror("Error", str(exc))
-            self.set_status(str(exc), warning=True)
+    def _on_save_settings_complete(self, result: Any, error: Exception | None) -> None:
+        """Handle completion of Save Settings wallpaper job."""
+        if error is not None:
+            messagebox.showerror("Error", str(error))
+            self.set_status(str(error), warning=True)
+            return
+
+        if not bool(result):
+            messagebox.showerror("Error", "Failed to generate or set the wallpaper. Check wallpaper.log.")
+            self.set_status("Wallpaper generation failed.", warning=True)
             return
 
         self.apply_windows_automation(show_success=False)
@@ -1202,7 +1287,9 @@ class LifeCalendarGUI:
         """Retry task registration from Settings."""
         if not self._sync_config_from_ui():
             return
-        self.save_config()
+        if not self.save_config():
+            self.set_status("Unable to save config. Automation retry cancelled.", warning=True)
+            return
         self.apply_windows_automation(show_success=True)
 
     def preview_wallpaper(self) -> None:
@@ -1210,24 +1297,33 @@ class LifeCalendarGUI:
         if not self._sync_config_from_ui():
             return
 
-        self.save_config()
-        self.set_status("Generating preview...")
-        self.root.update_idletasks()
-
-        try:
+        if not self.save_config():
+            self.set_status("Unable to save config. Preview cancelled.", warning=True)
+            return
+        def worker() -> tuple[bool, str, str]:
             engine = WallpaperEngine(self.config_file)
             success, message = engine.generate_wallpaper()
-            if success:
-                from PIL import Image
+            return success, message, engine.wallpaper_path
 
-                Image.open(engine.wallpaper_path).show()
-                self.set_status("Preview opened.", success=True)
-            else:
-                messagebox.showerror("Error", message)
-                self.set_status(message, warning=True)
-        except Exception as exc:
-            messagebox.showerror("Error", str(exc))
-            self.set_status(str(exc), warning=True)
+        self._run_wallpaper_task("Generating preview...", worker=worker, on_done=self._on_preview_complete)
+
+    def _on_preview_complete(self, result: Any, error: Exception | None) -> None:
+        """Handle completion of preview generation."""
+        if error is not None:
+            messagebox.showerror("Error", str(error))
+            self.set_status(str(error), warning=True)
+            return
+
+        success, message, wallpaper_path = result
+        if success:
+            from PIL import Image
+
+            Image.open(wallpaper_path).show()
+            self.set_status("Preview opened.", success=True)
+            return
+
+        messagebox.showerror("Error", message)
+        self.set_status(message, warning=True)
 
     def refresh_wallpaper_now(self) -> None:
         """Refresh the wallpaper immediately from the saved config."""
@@ -1236,16 +1332,23 @@ class LifeCalendarGUI:
             self.show_view("settings")
             return
 
-        self.set_status("Refreshing wallpaper...")
-        self.root.update_idletasks()
-        try:
-            engine = WallpaperEngine(self.config_file)
-            if engine.run_auto():
-                self.set_status("Wallpaper refreshed.", success=True)
-            else:
-                self.set_status("Wallpaper refresh failed. Check wallpaper.log.", warning=True)
-        except Exception as exc:
-            self.set_status(str(exc), warning=True)
+        self._run_wallpaper_task(
+            "Refreshing wallpaper...",
+            worker=lambda: WallpaperEngine(self.config_file).run_auto(),
+            on_done=self._on_refresh_complete,
+        )
+
+    def _on_refresh_complete(self, result: Any, error: Exception | None) -> None:
+        """Handle completion of manual refresh."""
+        if error is not None:
+            self.set_status(str(error), warning=True)
+            return
+
+        if bool(result):
+            self.set_status("Wallpaper refreshed.", success=True)
+            return
+
+        self.set_status("Wallpaper refresh failed. Check wallpaper.log.", warning=True)
 
     def submit_checkin(self) -> None:
         """Save or update today's daily check-in."""
@@ -1259,7 +1362,8 @@ class LifeCalendarGUI:
         if mood not in VALID_MOODS:
             mood = "neutral"
 
-        result = self.checkin_store.check_in(mood, note)
+        max_note_length = int(self.config.get("max_note_length", MAX_NOTE_LENGTH))
+        result = self.checkin_store.check_in(mood, note, max_note_length=max_note_length)
         self.refresh_today_dashboard()
         if result.updated_existing:
             self.set_status(
@@ -1278,7 +1382,9 @@ class LifeCalendarGUI:
             return
 
         self.config = merge_config()
-        self.save_config()
+        if not self.save_config():
+            self.set_status("Failed to reset defaults because config could not be saved.", warning=True)
+            return
 
         self.mode_var.set(self.config.get("mode", "life"))
         self.dob_entry.delete(0, tk.END)
