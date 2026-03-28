@@ -1,0 +1,92 @@
+name: Build Cross-Platform
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-windows-x64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          architecture: "x64"
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements.txt pyinstaller
+      - run: echo LIFECALENDAR_TARGET_ARCH=x86_64>> %GITHUB_ENV%
+      - run: >
+          python -m PyInstaller --noconfirm --clean
+          --distpath dist/windows/x64
+          --workpath build/windows/x64
+          life_calendar.spec
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LifeCalendar-Windows-x64
+          path: dist/windows/x64/LifeCalendar.exe
+
+  build-windows-x86:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          architecture: "x86"
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements.txt pyinstaller
+      - run: echo LIFECALENDAR_TARGET_ARCH=x86>> %GITHUB_ENV%
+      - run: >
+          python -m PyInstaller --noconfirm --clean
+          --distpath dist/windows/x86
+          --workpath build/windows/x86
+          life_calendar.spec
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LifeCalendar-Windows-x86
+          path: dist/windows/x86/LifeCalendar.exe
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements.txt pyinstaller
+      - run: echo "LIFECALENDAR_TARGET_ARCH=x86_64" >> $GITHUB_ENV
+      - run: >
+          python -m PyInstaller --noconfirm --clean
+          --distpath dist/macos
+          --workpath build/macos
+          life_calendar.spec
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LifeCalendar-macOS
+          path: dist/macos/LifeCalendar.app
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: sudo apt-get update
+      - run: sudo apt-get install -y python3-tk
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements.txt pyinstaller
+      - run: echo "LIFECALENDAR_TARGET_ARCH=x86_64" >> $GITHUB_ENV
+      - run: >
+          python -m PyInstaller --noconfirm --clean
+          --distpath dist/linux
+          --workpath build/linux
+          life_calendar.spec
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LifeCalendar-Linux
+          path: dist/linux/LifeCalendar

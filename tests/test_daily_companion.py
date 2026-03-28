@@ -2,6 +2,7 @@
 
 import json
 from datetime import date, datetime
+import pytest
 
 from daily_companion import DailyCheckinStore, get_today_metrics, merge_config
 
@@ -33,7 +34,21 @@ def test_life_metrics_use_day_count_and_weeks_remaining():
     assert metrics.primary_line == "Day 10 / 32,871"
     assert "planned life has passed" in metrics.secondary_lines[0]
     assert "weeks remain" in metrics.secondary_lines[1]
+    assert len(metrics.secondary_lines) == 2
     assert metrics.week_progress is not None
+
+
+def test_metrics_keep_emotional_line_separate_from_secondary_lines():
+    metrics = get_today_metrics(
+        {
+            "mode": "year",
+        },
+        on_date=date(2026, 3, 29),
+    )
+
+    assert metrics.emotional_line
+    assert metrics.emotional_line not in metrics.secondary_lines
+    assert metrics.stat_lines[-1] == metrics.emotional_line
 
 
 def test_checkins_increment_streak_and_same_day_edits_do_not(tmp_path):
@@ -62,3 +77,22 @@ def test_corrupt_store_is_reset_with_warning(tmp_path):
     assert store.get_entry() is None
     repaired = json.loads(store_path.read_text(encoding="utf-8"))
     assert repaired == {"entries": {}}
+
+
+def test_checkin_write_failure_does_not_mutate_memory(tmp_path):
+    store = DailyCheckinStore(tmp_path)
+
+    def fail_write(*_args, **_kwargs):
+        raise OSError("disk full")
+
+    store._write = fail_write  # type: ignore[method-assign]
+
+    with pytest.raises(OSError):
+        store.check_in("good", "Will fail", checkin_day=date(2026, 3, 21))
+
+    assert store.get_entry(date(2026, 3, 21)) is None
+
+
+def test_merge_config_sanitizes_invalid_max_note_length():
+    merged = merge_config({"max_note_length": "abc"})
+    assert merged["max_note_length"] == 120

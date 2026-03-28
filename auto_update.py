@@ -17,6 +17,7 @@ NOTE: Scheduler registration is handled by GUI, not this updater.
 import re
 import sys
 import os
+import logging
 from pathlib import Path
 from typing import Optional
 
@@ -42,6 +43,21 @@ def get_base_dir() -> Path:
 
 # Get correct base directory (do this ONCE at module level)
 BASE_DIR = get_base_dir()
+LOGGER = logging.getLogger("auto_update")
+
+
+# FIX: [32] Warn when data directory is inside sync folders that can break lock semantics.
+def warn_if_sync_folder(base_dir: Path) -> None:
+    normalized = str(base_dir).lower()
+    for token in ("onedrive", "dropbox", "icloud"):
+        if token in normalized:
+            LOGGER.warning(
+                "Data directory appears to be in a sync folder (%s): %s. "
+                "This can cause lock or timestamp conflicts.",
+                token,
+                base_dir,
+            )
+            return
 
 
 def needs_update() -> bool:
@@ -52,24 +68,36 @@ def needs_update() -> bool:
 
     NOTE: This is READ-ONLY. Use mark_updated() after confirming success.
     """
-    from datetime import date
+    from datetime import date, datetime
 
     timestamp_file = BASE_DIR / ".last_update_date"
     today_str = str(date.today())
 
     try:
         if timestamp_file.exists():
-            with open(timestamp_file, 'r') as f:
+            with open(timestamp_file, 'r', encoding='utf-8') as f:
                 last_update = f.read().strip()
 
-            # C3: Validate timestamp format (YYYY-MM-DD) before using it
+            # Validate timestamp format (YYYY-MM-DD) before using it.
             if not re.match(r'^\d{4}-\d{2}-\d{2}$', last_update):
                 # Corrupted timestamp - treat as "needs update"
                 return True
 
-            # If last_update equals or exceeds today (handles clock jumps backward), skip
-            if last_update >= today_str:
-                # Already updated today, or clock jump detected - skip
+            try:
+                # FIX: [10] Validate semantic date, not just regex shape.
+                last_update_date = datetime.strptime(last_update, "%Y-%m-%d").date()
+            except ValueError:
+                # Regex can still match impossible dates such as 2024-99-99.
+                return True
+
+            today_date = date.fromisoformat(today_str)
+
+            # FIX: [11] Future timestamps are treated as corrupted metadata.
+            if last_update_date > today_date:
+                return True
+
+            # Skip only when already updated today.
+            if last_update_date == today_date:
                 return False
 
         return True
@@ -90,7 +118,10 @@ def _wallpaper_recently_modified() -> bool:
     wallpaper = BASE_DIR / "life_calendar_wallpaper.png"
     try:
         if wallpaper.exists():
-            age_seconds = time.time() - wallpaper.stat().st_mtime
+            # FIX: [23] Capture current time first for a stable age calculation.
+            current_time = time.time()
+            modified_time = wallpaper.stat().st_mtime
+            age_seconds = current_time - modified_time
             if age_seconds < 300:  # 5 minutes
                 return True
     except OSError:
@@ -107,10 +138,11 @@ def mark_updated() -> None:
 
     timestamp_file = BASE_DIR / ".last_update_date"
     try:
-        with open(timestamp_file, 'w') as f:
+        with open(timestamp_file, 'w', encoding='utf-8') as f:
             f.write(str(date.today()))
-    except OSError:
-        pass  # Non-critical - worst case we update again
+    except OSError as exc:
+        # FIX: [19] Surface filesystem failures when mark_updated cannot persist state.
+        LOGGER.warning("mark_updated failed: %s", exc)
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -152,6 +184,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     else:
         logger.info("Auto-update started")
 
+    # FIX: [32] Warn about lock/timestamp conflicts in synchronized folders.
+    warn_if_sync_folder(BASE_DIR)
+
     # Unified stale lock cleanup policy is implemented in wallpaper_engine.
     # We do an optional pre-clean for obviously broken lock files only.
     lock_file = BASE_DIR / ".life_calendar.lock"
@@ -172,6 +207,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     # Rate-limit: skip if wallpaper was modified very recently (< 5 min)
     if _wallpaper_recently_modified():
         logger.info("Wallpaper was modified less than 5 minutes ago - rate limited")
+        mark_updated()
         return 0
 
     # NOTE: Scheduler registration is handled by GUI, not updater
@@ -190,7 +226,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                     "Life Calendar Error\n"
                     "===================\n"
                     "Config file not found\n\n"
-                    "Solution: Run LifeCalendar.exe first to create a config file."
+                    "Solution: Run LifeCalendar.exe first to create a config file.",
+                    encoding="utf-8",
                 )
             except OSError as e:
                 import errno
@@ -211,7 +248,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             # D6: Test mode - generate but don't set or mark as updated
             try:
                 from wallpaper_engine import acquire_lock, release_lock
-                acquire_lock()
+                # FIX: [20] Use bounded lock wait in scheduler paths.
+                acquire_lock(timeout_seconds=10)
                 try:
                     logger.info("[DRY-RUN] Testing wallpaper generation only...")
                     success, message = engine.generate_wallpaper()
@@ -267,7 +305,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                         "Life Calendar Error\n"
                         "===================\n"
                         "Wallpaper generation failed\n\n"
-                        "Check wallpaper.log for details"
+                        "Check wallpaper.log for details",
+                        encoding="utf-8",
                     )
                 except OSError as e:
                     import errno

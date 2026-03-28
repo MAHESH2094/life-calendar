@@ -39,7 +39,7 @@ def _write_config(tmp_path):
         },
     }
     cfg_path = tmp_path / "life_calendar_config.json"
-    cfg_path.write_text(json.dumps(cfg))
+    cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
     return cfg_path
 
 
@@ -60,7 +60,7 @@ class TestNeedsUpdate:
     def test_stale_timestamp_needs_update(self, temp_dir):
         """If timestamp file has yesterday's date, update is needed."""
         ts_file = temp_dir / ".last_update_date"
-        ts_file.write_text("2020-01-01")
+        ts_file.write_text("2020-01-01", encoding="utf-8")
 
         with patch("auto_update.BASE_DIR", temp_dir):
             from auto_update import needs_update
@@ -69,11 +69,20 @@ class TestNeedsUpdate:
     def test_today_timestamp_skips(self, temp_dir):
         """If timestamp has today's date, no update needed."""
         ts_file = temp_dir / ".last_update_date"
-        ts_file.write_text(str(date.today()))
+        ts_file.write_text(str(date.today()), encoding="utf-8")
 
         with patch("auto_update.BASE_DIR", temp_dir):
             from auto_update import needs_update
             assert needs_update() is False
+
+    def test_future_timestamp_still_needs_update(self, temp_dir):
+        """Future timestamps should not block updates indefinitely."""
+        ts_file = temp_dir / ".last_update_date"
+        ts_file.write_text("2999-12-31", encoding="utf-8")
+
+        with patch("auto_update.BASE_DIR", temp_dir):
+            from auto_update import needs_update
+            assert needs_update() is True
 
 
 class TestMarkUpdated:
@@ -85,14 +94,14 @@ class TestMarkUpdated:
 
         ts_file = temp_dir / ".last_update_date"
         assert ts_file.exists()
-        assert ts_file.read_text().strip() == str(date.today())
+        assert ts_file.read_text(encoding="utf-8").strip() == str(date.today())
 
 
 class TestMain:
     def test_skips_if_already_updated(self, temp_dir):
         """main() should return 0 and skip if already updated today."""
         ts_file = temp_dir / ".last_update_date"
-        ts_file.write_text(str(date.today()))
+        ts_file.write_text(str(date.today()), encoding="utf-8")
 
         with patch("auto_update.BASE_DIR", temp_dir), \
              patch("auto_update.get_base_dir", return_value=temp_dir):

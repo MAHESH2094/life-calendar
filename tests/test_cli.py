@@ -38,47 +38,47 @@ class TestEnsureConfig:
             life_calendar_cli.CONFIG_PATH = original_path
 
         assert config_path.exists()
-        data = json.loads(config_path.read_text())
+        data = json.loads(config_path.read_text(encoding="utf-8"))
         assert "mode" in data
 
     def test_does_not_overwrite_existing_config(self, temp_dir):
         """_ensure_config should not overwrite an existing config."""
         config_path = temp_dir / "life_calendar_config.json"
         original = {"mode": "year", "dob": "2000-01-01", "lifespan": 80}
-        config_path.write_text(json.dumps(original))
+        config_path.write_text(json.dumps(original), encoding="utf-8")
 
         with patch("life_calendar_cli.CONFIG_PATH", config_path), \
              patch("life_calendar_cli.BASE_DIR", temp_dir):
             from life_calendar_cli import _ensure_config
             _ensure_config()
 
-        data = json.loads(config_path.read_text())
+        data = json.loads(config_path.read_text(encoding="utf-8"))
         assert data["mode"] == "year"  # Unchanged
 
 
 class TestInstallCron:
-    @patch("life_calendar_cli.platform.system", return_value="Windows")
-    def test_cron_on_windows_exits(self, mock_sys, temp_dir):
+    @patch("life_calendar_cli.sys.platform", "win32")
+    def test_cron_on_windows_exits(self, temp_dir):
         """_install_cron should exit on Windows."""
         from life_calendar_cli import _install_cron
         with pytest.raises(SystemExit):
             _install_cron()
 
-    @patch("life_calendar_cli.platform.system", return_value="Linux")
-    def test_cron_missing_wrapper_exits(self, mock_sys, temp_dir):
+    @patch("life_calendar_cli.sys.platform", "linux")
+    def test_cron_missing_wrapper_exits(self, temp_dir):
         """_install_cron should exit if cron_wrapper.sh is missing."""
         with patch("life_calendar_cli.BASE_DIR", temp_dir):
             from life_calendar_cli import _install_cron
             with pytest.raises(SystemExit):
                 _install_cron()
 
-    @patch("life_calendar_cli.platform.system", return_value="Linux")
+    @patch("life_calendar_cli.sys.platform", "linux")
     @patch("life_calendar_cli.subprocess.check_output", return_value=b"")
     @patch("life_calendar_cli.subprocess.run")
-    def test_cron_installs_successfully(self, mock_run, mock_check, mock_sys, temp_dir):
+    def test_cron_installs_successfully(self, mock_run, mock_check, temp_dir):
         """_install_cron should install a new crontab entry."""
         wrapper = temp_dir / "cron_wrapper.sh"
-        wrapper.write_text("#!/bin/bash\npython auto_update.py")
+        wrapper.write_text("#!/bin/bash\npython auto_update.py", encoding="utf-8")
 
         mock_run.return_value = MagicMock(returncode=0)
 
@@ -88,12 +88,12 @@ class TestInstallCron:
 
         mock_run.assert_called_once()
 
-    @patch("life_calendar_cli.platform.system", return_value="Linux")
+    @patch("life_calendar_cli.sys.platform", "linux")
     @patch("life_calendar_cli.subprocess.check_output")
-    def test_cron_skips_if_already_installed(self, mock_check, mock_sys, temp_dir):
+    def test_cron_skips_if_already_installed(self, mock_check, temp_dir):
         """_install_cron should skip if the cron line already exists."""
         wrapper = temp_dir / "cron_wrapper.sh"
-        wrapper.write_text("#!/bin/bash")
+        wrapper.write_text("#!/bin/bash", encoding="utf-8")
 
         # Simulate existing crontab that already contains our line
         import shlex
@@ -106,17 +106,39 @@ class TestInstallCron:
             _install_cron()
             # No subprocess.run call should happen - prints "already installed"
 
+    @patch("life_calendar_cli.sys.platform", "linux")
+    @patch("life_calendar_cli.subprocess.check_output")
+    @patch("life_calendar_cli.subprocess.run")
+    def test_cron_substring_match_does_not_count_as_duplicate(self, mock_run, mock_check, temp_dir):
+        """A line that merely contains the cron command as a substring should not be treated as duplicate."""
+        wrapper = temp_dir / "cron_wrapper.sh"
+        wrapper.write_text("#!/bin/bash", encoding="utf-8")
+
+        import shlex
+
+        log_path = shlex.quote(str(temp_dir / "cron.log"))
+        cron_line = f"1 0 * * * {shlex.quote(str(wrapper))} >> {log_path} 2>&1"
+        mock_check.return_value = f"# {cron_line} # commented\n".encode()
+        mock_run.return_value = MagicMock(returncode=0)
+
+        with patch("life_calendar_cli.BASE_DIR", temp_dir):
+            from life_calendar_cli import _install_cron
+
+            _install_cron()
+
+        mock_run.assert_called_once()
+
 
 class TestInstallWindowsTask:
-    @patch("life_calendar_cli.platform.system", return_value="Linux")
-    def test_win_task_on_linux_exits(self, mock_sys, temp_dir):
+    @patch("life_calendar_cli.sys.platform", "linux")
+    def test_win_task_on_linux_exits(self, temp_dir):
         """_install_windows_task should exit on non-Windows."""
         from life_calendar_cli import _install_windows_task
         with pytest.raises(SystemExit):
             _install_windows_task()
 
-    @patch("life_calendar_cli.platform.system", return_value="Windows")
-    def test_win_task_creates_successfully(self, mock_sys, temp_dir):
+    @patch("life_calendar_cli.sys.platform", "win32")
+    def test_win_task_creates_successfully(self, temp_dir):
         """_install_windows_task should load config and call sync_windows_tasks."""
         import json
 
@@ -129,7 +151,7 @@ class TestInstallWindowsTask:
             "resolution_width": 1920,
             "resolution_height": 1080,
             "config_version": 4,
-        }))
+        }), encoding="utf-8")
 
         # Patch sync_windows_tasks at the point it's imported
         with patch("life_calendar_cli.BASE_DIR", temp_dir):
@@ -154,7 +176,7 @@ class TestMainEntrypoint:
             "resolution_width": 1920,
             "resolution_height": 1080,
             "config_version": 4,
-        }))
+        }), encoding="utf-8")
 
         with patch("life_calendar_cli.CONFIG_PATH", config_path), \
              patch("life_calendar_cli.BASE_DIR", temp_dir), \

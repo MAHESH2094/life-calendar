@@ -2,16 +2,17 @@
 """Simple CLI helper for one-off runs and scheduler setup."""
 
 import json
-import platform
 import shlex
 import subprocess
 import sys
 from pathlib import Path
 
+from auto_update import get_base_dir as shared_get_base_dir
 from daily_companion import merge_config
 from wallpaper_engine import WallpaperEngine, force_release_lock
 
-BASE_DIR = Path(__file__).parent.absolute()
+# FIX: [29] Reuse centralized base-dir resolution.
+BASE_DIR = shared_get_base_dir()
 CONFIG_PATH = BASE_DIR / "life_calendar_config.json"
 
 
@@ -45,7 +46,8 @@ def _release_lock() -> None:
 
 def _install_cron(cron_time: str = "1 0 * * *") -> None:
     """Install a nightly cron job on Linux or macOS."""
-    if platform.system() == "Windows":
+    # FIX: [29] Use explicit sys.platform guard style.
+    if sys.platform == "win32":
         print("ERROR: Cron is not used on Windows - use --install-win instead.")
         sys.exit(1)
 
@@ -64,7 +66,8 @@ def _install_cron(cron_time: str = "1 0 * * *") -> None:
     except subprocess.CalledProcessError:
         existing = ""
 
-    if cron_line in existing:
+    existing_lines = {line.strip() for line in existing.splitlines() if line.strip()}
+    if cron_line.strip() in existing_lines:
         print("Cron job already installed.")
         return
 
@@ -89,16 +92,18 @@ def _install_cron(cron_time: str = "1 0 * * *") -> None:
 
 def _install_windows_task() -> None:
     """Create a Windows Task Scheduler entry using windows_automation module."""
-    if platform.system() != "Windows":
+    # FIX: [29] Use explicit sys.platform guard style.
+    if sys.platform != "win32":
         print("ERROR: Windows task creation only works on Windows.")
         sys.exit(1)
+
+    config_file = BASE_DIR / "life_calendar_config.json"
 
     try:
         from windows_automation import sync_windows_tasks
         import json
 
-        config_file = BASE_DIR / "life_calendar_config.json"
-        with open(config_file, 'r') as f:
+        with open(config_file, 'r', encoding='utf-8') as f:
             config = json.load(f)
 
         # Enable both automation options
@@ -131,7 +136,8 @@ def _install_windows_task() -> None:
 
 def _install_launchd() -> None:
     """Create a macOS launchd plist for scheduled updates."""
-    if platform.system() != "Darwin":
+    # FIX: [29] Use explicit sys.platform guard style.
+    if sys.platform != "darwin":
         print("ERROR: launchd creation only works on macOS.")
         sys.exit(1)
 

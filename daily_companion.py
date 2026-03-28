@@ -6,6 +6,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 import json
+import logging
 from pathlib import Path
 import shutil
 from typing import Any, Optional
@@ -13,7 +14,9 @@ from typing import Any, Optional
 CONFIG_VERSION = 4
 CHECKIN_FILENAME = "daily_checkins.json"
 MAX_NOTE_LENGTH = 120
+MAX_ALLOWED_NOTE_LENGTH = 1000
 VALID_MOODS = ("good", "neutral", "low")
+logger = logging.getLogger("daily_companion")
 
 DEFAULT_CONFIG = {
     "mode": "life",
@@ -64,7 +67,7 @@ class TodayMetrics:
 
     @property
     def stat_lines(self) -> list[str]:
-        return [self.primary_line, *self.secondary_lines]
+        return [self.primary_line, *self.secondary_lines, self.emotional_line]
 
 
 @dataclass(frozen=True)
@@ -86,6 +89,33 @@ def safe_parse_date(value: Any) -> Optional[date]:
         return None
 
 
+def _parse_lifespan(value: Any, *, default: int = 90, strict: bool = False) -> int:
+    """Parse and validate lifespan with optional strict errors."""
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        if strict:
+            raise ValueError("Lifespan must be a whole number between 1 and 150")
+        return default
+
+    if not 1 <= parsed <= 150:
+        if strict:
+            raise ValueError("Lifespan must be between 1 and 150")
+        return default
+    return parsed
+
+
+def sanitize_max_note_length(value: Any, default: int = MAX_NOTE_LENGTH) -> int:
+    """Normalize note length limits from config/user data."""
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    if parsed < 1:
+        return default
+    return min(parsed, MAX_ALLOWED_NOTE_LENGTH)
+
+
 def merge_config(loaded: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     """Merge persisted config with current defaults and migrate old versions."""
     merged = deepcopy(DEFAULT_CONFIG)
@@ -99,6 +129,50 @@ def merge_config(loaded: Optional[dict[str, Any]] = None) -> dict[str, Any]:
             merged["palette"].update(value)
         else:
             merged[key] = value
+
+    for key in ("dob", "goal_start", "goal_end", "goal_title", "goal_subtitle"):
+        value = merged.get(key)
+        merged[key] = value if isinstance(value, str) else DEFAULT_CONFIG[key]
+
+    try:
+        merged["resolution_width"] = int(merged.get("resolution_width", DEFAULT_CONFIG["resolution_width"]))
+    except (TypeError, ValueError):
+        merged["resolution_width"] = DEFAULT_CONFIG["resolution_width"]
+
+    try:
+        merged["resolution_height"] = int(merged.get("resolution_height", DEFAULT_CONFIG["resolution_height"]))
+    except (TypeError, ValueError):
+        merged["resolution_height"] = DEFAULT_CONFIG["resolution_height"]
+
+    try:
+        grid_cell_size = int(merged.get("grid_cell_size", DEFAULT_CONFIG["grid_cell_size"]))
+    except (TypeError, ValueError):
+        grid_cell_size = DEFAULT_CONFIG["grid_cell_size"]
+    merged["grid_cell_size"] = max(2, min(100, grid_cell_size))
+
+    merged["max_note_length"] = sanitize_max_note_length(
+        merged.get("max_note_length", DEFAULT_CONFIG["max_note_length"]),
+        default=DEFAULT_CONFIG["max_note_length"],
+    )
+
+    opportunities = merged.get("opportunities")
+    merged["opportunities"] = opportunities if isinstance(opportunities, list) else []
+
+    automation = merged.get("automation")
+    if isinstance(automation, dict):
+        for key, default_value in DEFAULT_CONFIG["automation"].items():
+            current = automation.get(key, default_value)
+            automation[key] = current if isinstance(current, bool) else default_value
+    else:
+        merged["automation"] = deepcopy(DEFAULT_CONFIG["automation"])
+
+    palette = merged.get("palette")
+    if isinstance(palette, dict):
+        for key, default_value in DEFAULT_CONFIG["palette"].items():
+            current = palette.get(key, default_value)
+            palette[key] = current if isinstance(current, str) else default_value
+    else:
+        merged["palette"] = deepcopy(DEFAULT_CONFIG["palette"])
 
     merged["config_version"] = CONFIG_VERSION
     return merged
@@ -116,8 +190,8 @@ def config_has_profile(config: dict[str, Any]) -> bool:
     if mode == "life":
         dob = safe_parse_date(config.get("dob", ""))
         try:
-            lifespan = int(config.get("lifespan", 0))
-        except (TypeError, ValueError):
+            lifespan = _parse_lifespan(config.get("lifespan", 0), strict=True)
+        except ValueError:
             return False
         return dob is not None and dob <= date.today() and 1 <= lifespan <= 150
 
@@ -140,7 +214,7 @@ def get_today_metrics(config: dict[str, Any], on_date: Optional[date] = None) ->
         if dob is None:
             raise ValueError("Date of birth is required for life mode")
 
-        lifespan = int(config.get("lifespan", 90))
+        lifespan = _parse_lifespan(config.get("lifespan", 90), strict=True)
         total_days = max(1, int(lifespan * 365.2425))
         days_lived = max(0, (current_day - dob).days)
         days_lived = min(days_lived, total_days)
@@ -159,7 +233,6 @@ def get_today_metrics(config: dict[str, Any], on_date: Optional[date] = None) ->
         secondary_lines = [
             f"{progress_percent:g}% of your planned life has passed",
             f"About {weeks_remaining:,} weeks remain",
-            emotional_line,
         ]
         return TodayMetrics(
             mode=mode,
@@ -181,7 +254,6 @@ def get_today_metrics(config: dict[str, Any], on_date: Optional[date] = None) ->
         secondary_lines = [
             f"{progress_percent:g}% of this year has passed",
             f"{max(0, total_days - day_number):,} days remain in {year}",
-            emotional_line,
         ]
         return TodayMetrics(
             mode=mode,
@@ -219,7 +291,6 @@ def get_today_metrics(config: dict[str, Any], on_date: Optional[date] = None) ->
         secondary_lines = [
             f"{progress_percent:g}% of this goal window has passed",
             f"{remaining_days:,} days remain",
-            emotional_line,
         ]
         return TodayMetrics(
             mode=mode,
@@ -288,6 +359,14 @@ class DailyCheckinStore:
             }
 
         self._data = {"entries": repaired_entries}
+
+        # FIX: [31] Warn when check-in history becomes large and should be archived.
+        if len(repaired_entries) > 1000:
+            logger.warning(
+                "Daily check-in history has %s entries. Consider archiving older entries.",
+                len(repaired_entries),
+            )
+
         if repaired:
             self.warning_message = "Some daily history entries were repaired."
             self._write()
@@ -297,41 +376,38 @@ class DailyCheckinStore:
         self._data = {"entries": {}}
         self._write()
 
-    def _write(self) -> None:
+    def _write(self, payload: Optional[dict[str, dict[str, dict[str, str]]]] = None) -> None:
         """Write data atomically with temp file + rename to prevent corruption."""
         import tempfile
         import os
 
-        try:
-            # Write to temp file in the same directory
-            # Use a simple approach: write to temp file, close it properly, then rename
-            temp_dir = self.path.parent
-            fd, temp_path = tempfile.mkstemp(dir=temp_dir, suffix='.tmp', text=True)
-            try:
-                with os.fdopen(fd, 'w', encoding='utf-8') as temp_file:
-                    temp_file.write(json.dumps(self._data, indent=2))
+        write_data = payload if payload is not None else self._data
 
-                # Atomic rename - either succeeds or fails to completion (on POSIX)
-                # On Windows, replace() will overwrite the destination
-                self.path.parent.mkdir(parents=True, exist_ok=True)
+        # Write to temp file in the same directory
+        # Use a simple approach: write to temp file, close it properly, then rename
+        temp_dir = self.path.parent
+        fd, temp_path = tempfile.mkstemp(dir=temp_dir, suffix='.tmp', text=True)
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as temp_file:
+                temp_file.write(json.dumps(write_data, indent=2))
+
+            # Atomic rename - either succeeds or fails to completion (on POSIX)
+            # On Windows, replace() will overwrite the destination
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                os.replace(temp_path, str(self.path))
+            except OSError as e:
+                # C5: Fallback for Windows permission issues (read-only destination)
                 try:
-                    os.replace(temp_path, str(self.path))
-                except OSError as e:
-                    # C5: Fallback for Windows permission issues (read-only destination)
-                    try:
-                        shutil.move(temp_path, str(self.path))
-                    except Exception as move_err:
-                        raise OSError(f"Failed to write check-in file (os.replace failed: {e}, shutil.move failed: {move_err})") from move_err
-            except Exception:
-                # Clean up temp file if something goes wrong
-                try:
-                    os.unlink(temp_path)
-                except OSError:
-                    pass
-                raise
+                    shutil.move(temp_path, str(self.path))
+                except Exception as move_err:
+                    raise OSError(f"Failed to write check-in file (os.replace failed: {e}, shutil.move failed: {move_err})") from move_err
         except Exception:
-            # Non-fatal: log but don't crash (check-in data is in memory)
-            # The in-memory copy is still valid for this session
+            # Clean up temp file if something goes wrong
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
             raise
 
     def get_entry(self, entry_date: Optional[date] = None) -> Optional[dict[str, str]]:
@@ -382,12 +458,14 @@ class DailyCheckinStore:
         timestamp = current_time or datetime.now().astimezone()
 
         updated_existing = key in self._data["entries"]
-        self._data["entries"][key] = {
+        updated_data = {"entries": dict(self._data["entries"])}
+        updated_data["entries"][key] = {
             "mood": normalized_mood,
             "note": normalized_note,
             "updated_at": timestamp.isoformat(timespec="seconds"),
         }
-        self._write()
+        self._write(updated_data)
+        self._data = updated_data
 
         return CheckinResult(
             date_key=key,
@@ -408,7 +486,7 @@ def normalize_note(note: Any, max_length: int = 120) -> str:
     if not isinstance(note, str):
         return ""
     single_line = " ".join(note.replace("\r", " ").replace("\n", " ").split())
-    return single_line[:max_length]
+    return single_line[:sanitize_max_note_length(max_length)]
 
 
 def _is_leap_year(year: int) -> bool:

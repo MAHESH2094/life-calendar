@@ -7,7 +7,6 @@ import ctypes
 from datetime import date, datetime
 import json
 import os
-import platform
 import shutil
 import sys
 import threading
@@ -15,6 +14,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import Any, Callable
 
+from auto_update import get_base_dir as shared_get_base_dir
 from daily_companion import (
     DailyCheckinStore,
     MAX_NOTE_LENGTH,
@@ -22,12 +22,13 @@ from daily_companion import (
     config_has_profile,
     get_today_metrics,
     merge_config,
+    sanitize_max_note_length,
 )
 from wallpaper_engine import WallpaperEngine, get_screen_resolution, safe_date
 from windows_automation import sync_windows_tasks
 
 
-if platform.system() == "Windows":
+if sys.platform == "win32":
     try:
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
     except Exception:
@@ -47,9 +48,8 @@ def safe_int(value: str, default: int = 0) -> int:
 
 def get_base_dir() -> str:
     """Get the base directory for both source and PyInstaller builds."""
-    if getattr(sys, "frozen", False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
+    # FIX: [29] Reuse centralized base-dir resolution.
+    return str(shared_get_base_dir())
 
 
 BASE_DIR = get_base_dir()
@@ -895,7 +895,7 @@ class LifeCalendarGUI:
         )
         self.automation_status_label.pack(anchor="w", pady=(10, 0))
 
-        if platform.system() != "Windows":
+        if sys.platform != "win32":
             self.wallpaper_task_checkbox.config(state="disabled")
             self.startup_checkbox.config(state="disabled")
 
@@ -955,7 +955,10 @@ class LifeCalendarGUI:
         """Keep the daily note to one line and max length from config."""
         self._note_update_job = None
 
-        max_length = self.config.get("max_note_length", MAX_NOTE_LENGTH)
+        max_length = sanitize_max_note_length(
+            self.config.get("max_note_length", MAX_NOTE_LENGTH),
+            default=MAX_NOTE_LENGTH,
+        )
         raw_note = self.note_var.get().replace("\r", " ").replace("\n", " ")
         if len(raw_note) > max_length:
             raw_note = raw_note[:max_length]
@@ -1043,7 +1046,7 @@ class LifeCalendarGUI:
 
     def update_automation_status(self) -> None:
         """Show current automation messaging."""
-        if platform.system() != "Windows":
+        if sys.platform != "win32":
             self.automation_status_label.config(
                 text="Startup reminder and one-click automation stay Windows-first in this version.",
                 fg="#7f8aa0",
@@ -1125,7 +1128,7 @@ class LifeCalendarGUI:
         if dob_value is None:
             messagebox.showerror("Invalid Date", "Date of birth must use YYYY-MM-DD.")
             return False
-        if dob_value > datetime.now():
+        if dob_value.date() > date.today():
             messagebox.showerror("Invalid Date", "Date of birth cannot be in the future.")
             return False
 
@@ -1170,8 +1173,15 @@ class LifeCalendarGUI:
 
     def _validate_and_sync_resolution(self) -> bool:
         """Validate and sync resolution settings from UI to config."""
-        width = safe_int(self.width_entry.get(), 1920)
-        height = safe_int(self.height_entry.get(), 1080)
+        width_raw = self.width_entry.get().strip()
+        height_raw = self.height_entry.get().strip()
+        try:
+            width = int(width_raw)
+            height = int(height_raw)
+        except ValueError:
+            messagebox.showerror("Resolution Error", "Resolution width and height must be whole numbers.")
+            return False
+
         if width < 800 or height < 600:
             messagebox.showerror("Resolution Error", "Resolution must be at least 800x600.")
             return False
@@ -1256,7 +1266,7 @@ class LifeCalendarGUI:
 
     def apply_windows_automation(self, show_success: bool = True) -> bool:
         """Apply Windows automation preferences without making failures fatal."""
-        if platform.system() != "Windows":
+        if sys.platform != "win32":
             self.automation_warning = ""
             self.update_automation_status()
             return True
@@ -1318,6 +1328,11 @@ class LifeCalendarGUI:
             self.set_status(str(error), warning=True)
             return
 
+        if not isinstance(result, tuple) or len(result) != 3:
+            self.set_status("Preview failed: worker returned malformed result.", warning=True)
+            messagebox.showerror("Error", "Preview failed because the worker returned malformed data.")
+            return
+
         success, message, wallpaper_path = result
         if success:
             from PIL import Image
@@ -1366,7 +1381,10 @@ class LifeCalendarGUI:
         if mood not in VALID_MOODS:
             mood = "neutral"
 
-        max_note_length = int(self.config.get("max_note_length", MAX_NOTE_LENGTH))
+        max_note_length = sanitize_max_note_length(
+            self.config.get("max_note_length", MAX_NOTE_LENGTH),
+            default=MAX_NOTE_LENGTH,
+        )
         result = self.checkin_store.check_in(mood, note, max_note_length=max_note_length)
         self.refresh_today_dashboard()
         if result.updated_existing:

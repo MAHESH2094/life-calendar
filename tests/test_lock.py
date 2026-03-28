@@ -65,7 +65,7 @@ class TestLockFileHandling:
         with patch("wallpaper_engine.LOCK_FILE", str(lock_path)):
             # Create a stale lock file (old PID, old timestamp)
             stale_pid = 99999  # Non-existent PID
-            lock_path.write_text(str(stale_pid))
+            lock_path.write_text(str(stale_pid), encoding="utf-8")
 
             # Keep an old timestamp to validate age logging paths.
             old_time = time.time() - (3 * 3600)
@@ -85,7 +85,7 @@ class TestLockFileHandling:
         lock_path = temp_dir / ".life_calendar.lock"
         with patch("wallpaper_engine.LOCK_FILE", str(lock_path)):
             # Write garbage to lock file
-            lock_path.write_text("not_a_pid")
+            lock_path.write_text("not_a_pid", encoding="utf-8")
 
             # Should clean up and acquire successfully
             acquire_lock()

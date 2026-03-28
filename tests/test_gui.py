@@ -235,3 +235,18 @@ class TestGUIAsyncOperations:
         assert isinstance(callback_data["error"], ValueError)
         assert "Test worker error" in str(callback_data["error"])
         assert callback_data.get("result") is None
+
+    def test_preview_complete_handles_malformed_result(self):
+        """Malformed preview worker output should be handled without unpacking crash."""
+        from unittest.mock import MagicMock
+
+        gui = MagicMock()
+        gui.set_status = MagicMock()
+
+        gui._on_preview_complete = life_calendar_gui.LifeCalendarGUI._on_preview_complete.__get__(gui)
+
+        with patch("life_calendar_gui.messagebox.showerror") as show_error:
+            gui._on_preview_complete((True, "ok"), None)
+
+        show_error.assert_called_once()
+        gui.set_status.assert_called_once()

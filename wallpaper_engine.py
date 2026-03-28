@@ -4,7 +4,7 @@ NO GUI DEPENDENCIES - Scheduler friendly
 Version 2.0 - Improved with robust error handling
 """
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
 from datetime import datetime, date
 import json
 import os
@@ -23,10 +23,11 @@ import shutil
 import signal
 import atexit
 
+from auto_update import get_base_dir as shared_get_base_dir
 from daily_companion import get_today_metrics, merge_config
 
 # ==================== DPI AWARENESS (Windows) ====================
-if platform.system() == "Windows":
+if sys.platform == "win32":
     try:
         # Modern API (Win8.1+) - best quality
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
@@ -39,26 +40,19 @@ if platform.system() == "Windows":
 
 # ==================== LOGGING SETUP ====================
 
+# FIX: [29] Centralize base-directory resolution through auto_update.get_base_dir.
 def get_base_dir() -> str:
-    """Get base directory - works for both Python script and PyInstaller EXE"""
-    env_dir = os.getenv("LIFECALENDAR_DATA_DIR", "").strip()
-    if env_dir:
-        data_dir = os.path.abspath(os.path.expanduser(env_dir))
-        os.makedirs(data_dir, exist_ok=True)
-        return data_dir
-
-    if getattr(sys, 'frozen', False):
-        # Running as PyInstaller EXE
-        return os.path.dirname(sys.executable)
-    else:
-        # Running as Python script
-        return os.path.dirname(os.path.abspath(__file__))
+    return str(shared_get_base_dir())
 
 # Use base directory for log file (works in EXE and script modes)
 BASE_DIR = get_base_dir()
 LOG_PATH = os.path.join(BASE_DIR, "wallpaper.log")
 LOCK_FILE = os.path.join(BASE_DIR, ".life_calendar.lock")
 DEFAULT_MAX_RUNTIME_MINUTES = 30
+STALE_LOCK_TTL_SECONDS = 300
+LOCK_ACQUIRE_POLL_SECONDS = 0.25
+MAX_GRID_UNITS = 50_000
+MAX_SAFE_PIXELS = 7680 * 4320
 
 # Ensure signal hooks are only installed once per process.
 _LOCK_SIGNAL_HOOKS_INSTALLED = False
@@ -88,6 +82,21 @@ if not logger.handlers:
     log_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
     logger.addHandler(log_handler)
 
+
+# FIX: [22] Close and detach log handlers at process exit to reduce log corruption.
+def close_log_handlers() -> None:
+    for handler in list(logger.handlers):
+        try:
+            handler.flush()
+            handler.close()
+        except OSError:
+            pass
+        finally:
+            logger.removeHandler(handler)
+
+
+atexit.register(close_log_handlers)
+
 # Prevent duplicate logs under PyInstaller
 logger.propagate = False
 
@@ -98,7 +107,7 @@ if os.getenv("LIFECALENDAR_DEBUG") == "1":
 
 def _is_process_running(pid: int) -> bool:
     """Check if a process with given PID is running"""
-    if platform.system() == "Windows":
+    if sys.platform == "win32":
         try:
             import ctypes
             kernel32 = ctypes.windll.kernel32
@@ -209,11 +218,14 @@ def force_release_lock(reason: str = "manual force release") -> bool:
     return False
 
 
-def acquire_lock() -> None:
+def acquire_lock(timeout_seconds: float = 0) -> None:
     """Acquire exclusive lock with PID verification and stale detection."""
     install_lock_signal_handlers()
 
-    for _attempt in range(2):
+    start_time = time.monotonic()
+    last_error_message = "Another LifeCalendar process is already running"
+
+    while True:
         # Create new lock atomically first (fast path).
         try:
             fd = os.open(LOCK_FILE, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
@@ -237,30 +249,44 @@ def acquire_lock() -> None:
             max_age_seconds = _get_lock_max_age_seconds()
 
             if not _is_process_running(lock_pid):
-                _remove_lock_file(
-                    f"stale lock from dead process PID {lock_pid} (age {lock_age_seconds:.1f}s)"
+                # FIX: [21] Remove dead-process lock only after stale TTL expiry.
+                if lock_age_seconds > STALE_LOCK_TTL_SECONDS:
+                    _remove_lock_file(
+                        f"stale lock from dead process PID {lock_pid} (age {lock_age_seconds:.1f}s)"
+                    )
+                    continue
+                last_error_message = (
+                    "Another LifeCalendar process is already running "
+                    f"(dead PID: {lock_pid}, age: {lock_age_seconds:.0f}s, waiting for stale TTL)."
                 )
-                continue
-
-            # Running process: do not remove lock. Report age for diagnostics.
-            if lock_age_seconds > max_age_seconds:
-                raise RuntimeError(
+            elif lock_age_seconds > max_age_seconds:
+                last_error_message = (
                     "Another LifeCalendar process is already running "
                     f"(PID: {lock_pid}, age: {lock_age_seconds / 60:.0f}m, "
                     f"max_runtime: {max_age_seconds / 60:.0f}m)."
                 )
-
-            raise RuntimeError(
-                "Another LifeCalendar process is already running "
-                f"(PID: {lock_pid}, age: {lock_age_seconds / 60:.0f}m)."
-            )
+            else:
+                last_error_message = (
+                    "Another LifeCalendar process is already running "
+                    f"(PID: {lock_pid}, age: {lock_age_seconds / 60:.0f}m)."
+                )
 
         except (ValueError, json.JSONDecodeError, OSError) as exc:
             # Corrupted lock file: remove once, then retry acquisition.
             _remove_lock_file(f"corrupted or unreadable lock ({exc})")
             continue
 
-    raise RuntimeError("Another LifeCalendar process is already running")
+        # FIX: [20] Apply bounded lock wait instead of hanging indefinitely.
+        if timeout_seconds <= 0:
+            raise RuntimeError(last_error_message)
+
+        elapsed = time.monotonic() - start_time
+        if elapsed >= timeout_seconds:
+            raise RuntimeError(
+                f"Timed out after {timeout_seconds:.0f}s waiting for lock. {last_error_message}"
+            )
+
+        time.sleep(LOCK_ACQUIRE_POLL_SECONDS)
 
 
 def release_lock() -> None:
@@ -313,7 +339,7 @@ def get_screen_resolution() -> Tuple[int, int]:
         from screeninfo import get_monitors
         monitors = get_monitors()
         if monitors:
-            primary = monitors[0]
+            primary = next((m for m in monitors if getattr(m, "is_primary", False)), monitors[0])
             if primary.width >= 800 and primary.height >= 600:
                 logger.info(f"Detected screen resolution: {primary.width}x{primary.height}")
                 return primary.width, primary.height
@@ -334,7 +360,7 @@ class CalendarData(ABC):
     """Base class for calendar calculations"""
 
     @abstractmethod
-    def calculate(self) -> Tuple[int, int, str]:
+    def calculate(self, on_date: Optional[date] = None) -> Tuple[int, int, str]:
         """Returns (total_units, filled_units, stats_text)"""
         pass
 
@@ -361,10 +387,9 @@ class LifeCalendarData(CalendarData):
         self.dob = parsed
         self.lifespan = max(1, min(lifespan, 150))  # Clamp 1-150 years
 
-    def calculate(self) -> Tuple[int, int, str]:
-        # Always use current time - never cache
-        now = datetime.now()
-        days_lived = (now.date() - self.dob.date()).days
+    def calculate(self, on_date: Optional[date] = None) -> Tuple[int, int, str]:
+        current_day = on_date or date.today()
+        days_lived = (current_day - self.dob.date()).days
         weeks_lived = days_lived // 7
 
         # Calculate total weeks using accurate calendar math (365.2425 days/year)
@@ -391,9 +416,11 @@ class LifeCalendarData(CalendarData):
 class YearCalendarData(CalendarData):
     """Calendar data for current year progress (always uses system date)"""
 
-    def calculate(self) -> Tuple[int, int, str]:
-        # Always use current date - never cache
-        today = date.today()
+    def __init__(self, current_day: Optional[date] = None):
+        self.current_day = current_day
+
+    def calculate(self, on_date: Optional[date] = None) -> Tuple[int, int, str]:
+        today = on_date or self.current_day or date.today()
         year = today.year
 
         # Handle leap years correctly
@@ -415,7 +442,7 @@ class YearCalendarData(CalendarData):
         return total_days, day_of_year, stats
 
     def get_title(self) -> str:
-        year = date.today().year
+        year = (self.current_day or date.today()).year
         return f"YEAR PROGRESS {year}"
 
     def get_legend(self) -> List[Tuple[str, str]]:
@@ -448,9 +475,8 @@ class GoalCalendarData(CalendarData):
         if self.end <= self.start:
             raise ValueError("End date must be after start date")
 
-    def calculate(self) -> Tuple[int, int, str]:
-        # Always use current time - never cache
-        now = datetime.now().date()
+    def calculate(self, on_date: Optional[date] = None) -> Tuple[int, int, str]:
+        now = on_date or date.today()
 
         total_days = (self.end.date() - self.start.date()).days + 1
 
@@ -570,6 +596,7 @@ class WallpaperRenderer:
     FONT_PATHS = {
         'Windows': [
             r'C:\Windows\Fonts\arial.ttf',
+            r'C:\Windows\Fonts\SegoeUI.ttf',
             r'C:\Windows\Fonts\segoeui.ttf',
             r'C:\Windows\Fonts\tahoma.ttf',
         ],
@@ -577,10 +604,14 @@ class WallpaperRenderer:
             '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
             '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
             '/usr/share/fonts/TTF/DejaVuSans.ttf',
+            '/usr/local/share/fonts/DejaVuSans.ttf',
+            '~/.fonts/DejaVuSans.ttf',
         ],
         'Darwin': [
             '/System/Library/Fonts/Helvetica.ttc',
+            '/System/Library/Fonts/Supplemental/Arial.ttf',
             '/Library/Fonts/Arial.ttf',
+            '~/Library/Fonts/Arial.ttf',
         ]
     }
 
@@ -591,6 +622,17 @@ class WallpaperRenderer:
         self.width = width
         self.height = height
         self.config = config or {}
+
+        # FIX: [25] Warn when requested image size exceeds the known safe memory threshold.
+        if width * height > MAX_SAFE_PIXELS:
+            logger.warning(
+                "Large canvas requested (%sx%s = %s px) exceeds guard threshold %s px; proceeding.",
+                width,
+                height,
+                width * height,
+                MAX_SAFE_PIXELS,
+            )
+
         self.img = Image.new('RGB', (width, height), color='#050505')
         self.draw = ImageDraw.Draw(self.img)
 
@@ -609,7 +651,18 @@ class WallpaperRenderer:
 
     def _load_fonts(self) -> None:
         """Load fonts with proper OS detection and robust fall-backs (uses cache)"""
-        system = platform.system()
+        if sys.platform == "win32":
+            system = "Windows"
+        elif sys.platform == "darwin":
+            system = "Darwin"
+        else:
+            system = "Linux"
+
+        def _load_font(font_path: str, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+            if font_path.lower().endswith(".ttc"):
+                # FIX: [14] Use explicit face index for TTC collections.
+                return ImageFont.truetype(font_path, size, index=0)
+            return ImageFont.truetype(font_path, size)
 
         # Check cache first
         cache_key = f"{system}_fonts"
@@ -627,12 +680,13 @@ class WallpaperRenderer:
         loaded = False
         for font_path in font_paths:
             try:
-                if os.path.exists(font_path):
-                    title_font = ImageFont.truetype(font_path, 40)
-                    headline_font = ImageFont.truetype(font_path, 26)
-                    stats_font = ImageFont.truetype(font_path, 18)
-                    subtitle_font = ImageFont.truetype(font_path, 16)
-                    legend_font = ImageFont.truetype(font_path, 16)
+                expanded_path = os.path.expanduser(font_path)
+                if os.path.exists(expanded_path):
+                    title_font = _load_font(expanded_path, 40)
+                    headline_font = _load_font(expanded_path, 26)
+                    stats_font = _load_font(expanded_path, 18)
+                    subtitle_font = _load_font(expanded_path, 16)
+                    legend_font = _load_font(expanded_path, 16)
 
                     # Cache the fonts
                     WallpaperRenderer._font_cache[cache_key] = {
@@ -650,10 +704,10 @@ class WallpaperRenderer:
                     self.legend_font = legend_font
 
                     loaded = True
-                    logger.info(f"Loaded fonts from {font_path}")
+                    logger.info(f"Loaded fonts from {expanded_path}")
                     break
             except (IOError, OSError) as e:
-                logger.debug(f"Could not load font {font_path}: {e}")
+                logger.debug(f"Could not load font {expanded_path}: {e}")
                 continue
 
         if not loaded:
@@ -708,6 +762,15 @@ class WallpaperRenderer:
         current_progress: Optional[float] = None,
     ) -> None:
         """Draw the calendar grid using colors from config palette"""
+        # FIX: [24] Short-circuit oversized grids that can hang low-resource machines.
+        if total_units > MAX_GRID_UNITS:
+            logger.warning(
+                "Skipping grid render because total_units=%s exceeds MAX_GRID_UNITS=%s",
+                total_units,
+                MAX_GRID_UNITS,
+            )
+            return
+
         # Use palette colors loaded in __init__
         for i in range(total_units):
             x, y = layout.get_cell_position(i)
@@ -861,7 +924,7 @@ class WallpaperEngine:
             if dob_date is None:
                 raise ValueError("Invalid date of birth format. Use YYYY-MM-DD")
 
-            if dob_date > datetime.now():
+            if dob_date.date() > date.today():
                 raise ValueError("Date of birth cannot be in the future")
 
             # Lifespan validation - STRICT (no safe_int)
@@ -904,6 +967,7 @@ class WallpaperEngine:
             mode = self.config['mode']
             width = int(self.config['resolution_width'])
             height = int(self.config['resolution_height'])
+            current_day = date.today()
 
             # Data Layer
             if mode == 'life':
@@ -912,8 +976,7 @@ class WallpaperEngine:
                     int(self.config['lifespan'])
                 )
             elif mode == 'year':
-                # Auto-update to today's date for year mode - ALWAYS current
-                calendar_data = YearCalendarData()
+                calendar_data = YearCalendarData(current_day=current_day)
             elif mode == 'goal':
                 calendar_data = GoalCalendarData(
                     self.config['goal_start'],
@@ -924,8 +987,8 @@ class WallpaperEngine:
             else:
                 raise ValueError(f"Unknown mode: {mode}")
 
-            total_units, filled_units, _stats_text = calendar_data.calculate()
-            today_metrics = get_today_metrics(self.config)
+            total_units, filled_units, _stats_text = calendar_data.calculate(on_date=current_day)
+            today_metrics = get_today_metrics(self.config, on_date=current_day)
 
             # Layout Layer
             layout = GridLayout(mode, total_units, width, height, self.config)
@@ -957,25 +1020,26 @@ class WallpaperEngine:
 
             return True, f"Wallpaper generated: {self.wallpaper_path}"
 
-        except Exception as e:
+        # FIX: [28] Catch explicit hot-path failures and log full traceback.
+        except (OSError, ValueError, UnidentifiedImageError) as e:
             logger.exception(f"Generation failed: {e}")
             return False, f"Generation failed: {str(e)[:100]}"
 
     def set_wallpaper(self) -> Tuple[bool, str]:
         """Set the generated wallpaper with multi-OS support"""
         try:
-            system = platform.system()
-
-            if system == 'Windows':
+            # FIX: [29] Use explicit sys.platform checks for OS dispatch.
+            if sys.platform == 'win32':
                 return self._set_windows_wallpaper()
-            elif system == 'Darwin':
+            elif sys.platform == 'darwin':
                 return self._set_macos_wallpaper()
-            elif system == 'Linux':
+            elif sys.platform.startswith('linux'):
                 return self._set_linux_wallpaper()
             else:
-                return False, f"Unsupported OS: {system}"
+                return False, f"Unsupported OS: {sys.platform}"
 
-        except Exception as e:
+        # FIX: [28] Catch explicit hot-path failures and log full traceback.
+        except (OSError, ValueError, UnidentifiedImageError) as e:
             logger.exception(f"Failed to set wallpaper: {e}")
             return False, f"Failed to set wallpaper: {str(e)[:100]}"
 
@@ -1011,48 +1075,33 @@ class WallpaperEngine:
         return True, "Wallpaper set successfully"
 
     def _set_macos_wallpaper(self) -> Tuple[bool, str]:
-        """Set wallpaper on macOS using temp script file for safe path handling"""
-        import tempfile
+        """Set wallpaper on macOS using osascript args for robust path handling"""
         import subprocess
 
         abs_path = os.path.abspath(self.wallpaper_path)
-
-        # AppleScript with proper quoting
-        script = f'''
-        tell application "System Events"
-            repeat with d in desktops
-                set picture of d to "{abs_path}"
-            end repeat
-        end tell
-        '''
-
-        script_path = None
         try:
-            # Write to temp file to handle paths with spaces/unicode safely
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".scpt", mode='w', encoding='utf-8') as f:
-                f.write(script)
-                script_path = f.name
-
-            result = subprocess.run(["osascript", script_path], capture_output=True)
+            script = (
+                "on run argv\n"
+                "set wallpaperPath to quoted form of POSIX path of (item 1 of argv)\n"
+                "tell application \"System Events\"\n"
+                "repeat with d in desktops\n"
+                "set picture of d to POSIX file (item 1 of argv) as text\n"
+                "end repeat\n"
+                "end tell\n"
+                "end run"
+            )
+            result = subprocess.run(["osascript", "-e", script, abs_path], capture_output=True, text=True)
 
             if result.returncode == 0:
                 logger.info("Wallpaper set successfully on macOS")
                 return True, "Wallpaper set successfully"
             else:
-                logger.error(f"osascript failed: {result.stderr.decode()}")
+                logger.error(f"osascript failed: {result.stderr}")
                 return False, "osascript failed"
 
         except Exception as e:
             logger.exception(f"Failed to set macOS wallpaper: {e}")
             return False, f"Failed to set macOS wallpaper: {str(e)[:100]}"
-
-        finally:
-            # Clean up temp script
-            if script_path and os.path.exists(script_path):
-                try:
-                    os.unlink(script_path)
-                except OSError:
-                    pass
 
     def _set_linux_wallpaper(self) -> Tuple[bool, str]:
         """Set wallpaper on Linux with multi-DE support and fallback strategies"""
@@ -1167,7 +1216,8 @@ class WallpaperEngine:
     def run_auto(self) -> bool:
         """Automated run - for scheduler (NO USER INTERACTION)"""
         try:
-            acquire_lock()
+            # FIX: [20] Use bounded lock wait for scheduled/background runs.
+            acquire_lock(timeout_seconds=10)
 
             success, message = self.generate_wallpaper()
             if not success:

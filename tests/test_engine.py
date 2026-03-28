@@ -58,7 +58,7 @@ def make_config(mode, **overrides):
 def write_config(tmp_path, data):
     """Write config dict to a temporary JSON file and return its path."""
     cfg_path = tmp_path / "life_calendar_config.json"
-    cfg_path.write_text(json.dumps(data, indent=2))
+    cfg_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
     return str(cfg_path)
 
 
@@ -391,7 +391,7 @@ class TestConfigValidation:
 
     def test_invalid_json_raises(self, temp_dir):
         cfg_path = temp_dir / "life_calendar_config.json"
-        cfg_path.write_text("{bad json!!")
+        cfg_path.write_text("{bad json!!", encoding="utf-8")
         with pytest.raises(ValueError, match="Invalid JSON"):
             WallpaperEngine(str(cfg_path))
 

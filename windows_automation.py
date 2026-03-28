@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import logging
 import os
 from pathlib import Path
 import subprocess
@@ -11,13 +12,18 @@ import tempfile
 from typing import Optional
 from xml.sax.saxutils import escape
 
+from auto_update import get_base_dir as shared_get_base_dir
+
 WALLPAPER_TASK_NAME = "LifeCalendarWallpaper"
 STARTUP_TASK_NAME = "LifeCalendarStartupPrompt"
+logger = logging.getLogger("windows_automation")
 
 
 def sync_windows_tasks(config: dict, base_dir: Optional[str | Path] = None) -> tuple[bool, list[str]]:
     """Create or remove Windows tasks so they match config preferences."""
-    if os.name != "nt":
+    # FIX: [29] Use explicit sys.platform guards for platform-specific automation.
+    if sys.platform != "win32":
+        logger.info("Skipping Windows task sync on non-Windows platform: %s", sys.platform)
         return True, []
 
     automation = config.get("automation", {}) if isinstance(config, dict) else {}
@@ -61,7 +67,9 @@ def create_startup_task(base_dir: Optional[str | Path] = None) -> tuple[bool, Op
 
 def remove_windows_task(task_name: str) -> bool:
     """Remove a scheduled task. Missing tasks are treated as success."""
-    if os.name != "nt":
+    # FIX: [29] Use explicit sys.platform guards for platform-specific automation.
+    if sys.platform != "win32":
+        logger.info("Skipping task removal on non-Windows platform: %s", task_name)
         return True
 
     query = subprocess.run(
@@ -84,7 +92,8 @@ def remove_windows_task(task_name: str) -> bool:
 
 def resolve_task_action(mode_flag: str, base_dir: Optional[str | Path] = None) -> tuple[str, str, str]:
     """Resolve the command, arguments, and working directory for a task action."""
-    target_dir = Path(base_dir) if base_dir else Path(__file__).resolve().parent
+    # FIX: [29] Reuse centralized base-dir resolution.
+    target_dir = Path(base_dir) if base_dir else shared_get_base_dir()
 
     if getattr(sys, "frozen", False):
         # Frozen exe - quote the exe path and arguments to handle spaces
@@ -198,7 +207,9 @@ def _build_task_xml(triggers: str, command: str, arguments: str, working_dir: st
 
 def _create_task_from_xml(task_name: str, xml_content: str) -> tuple[bool, Optional[str]]:
     """Create or update a scheduled task from an XML definition."""
-    if os.name != "nt":
+    # FIX: [29] Use explicit sys.platform guards for platform-specific automation.
+    if sys.platform != "win32":
+        logger.info("Skipping task creation on non-Windows platform: %s", task_name)
         return True, None
 
     temp_path = None
