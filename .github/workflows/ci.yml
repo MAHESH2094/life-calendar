@@ -47,39 +47,17 @@ jobs:
         pip install -r requirements.txt
         pip install pytest pytest-cov
 
-    - name: Install system dependencies
+    - name: Install Xvfb
       run: |
         sudo apt-get update -y
-        # python3-tk and xauth are common causes of matrix-only GUI test failures.
         sudo apt-get install -y xvfb xauth python3-tk
 
-    - name: Verify GUI dependencies
-      run: |
-        python -c "import tkinter, PIL, screeninfo; print('GUI dependencies OK')"
-
-    - name: Debug Python 3.12 environment
-      if: matrix.python-version == '3.12'
-      run: |
-        python --version
-        pip list
-        python -c "import tkinter; print('tkinter ok')"
-        python -c "import PIL; print('PIL ok')"
-        python -c "import screeninfo; print('screeninfo ok')"
-
-    - name: Run tests with coverage (3.11)
-      if: matrix.python-version == '3.11'
-      run: |
-        xvfb-run -a pytest -v --cov=. --cov-report=xml --cov-report=term-missing
-
-    - name: Run tests with coverage (3.12 debug mode)
-      if: matrix.python-version == '3.12'
-      continue-on-error: true
+    - name: Run tests with coverage
       run: |
         xvfb-run -a pytest -v --cov=. --cov-report=xml --cov-report=term-missing
 
     - name: Upload coverage to Codecov
       if: matrix.python-version == '3.12'
-      continue-on-error: true
       uses: codecov/codecov-action@v4
       with:
         files: ./coverage.xml
