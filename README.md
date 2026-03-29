@@ -23,7 +23,7 @@ Built to be scheduler-safe, crash-resilient, and uninstall-clean.
 
 ### Life in Weeks
 
-![Life in Weeks]()
+![Life in Weeks](https://github.com/MAHESH2094/life-calendar/blob/main/Screenshot%202026-03-18%20233712.png?raw=true)
 
 ### Year Progress
 
