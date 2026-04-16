@@ -46,14 +46,14 @@ def _write_config(tmp_path):
 class TestNeedsUpdate:
     def test_first_run_needs_update(self, temp_dir):
         """First run (no timestamp file) should need an update."""
-        with patch("auto_update.BASE_DIR", temp_dir):
-            from auto_update import needs_update
+        with patch("lifecalendar.auto_update.BASE_DIR", temp_dir):
+            from lifecalendar.auto_update import needs_update
             assert needs_update() is True
 
     def test_after_mark_updated_no_update(self, temp_dir):
         """After mark_updated(), needs_update() should return False."""
-        with patch("auto_update.BASE_DIR", temp_dir):
-            from auto_update import needs_update, mark_updated
+        with patch("lifecalendar.auto_update.BASE_DIR", temp_dir):
+            from lifecalendar.auto_update import needs_update, mark_updated
             mark_updated()
             assert needs_update() is False
 
@@ -62,8 +62,8 @@ class TestNeedsUpdate:
         ts_file = temp_dir / ".last_update_date"
         ts_file.write_text("2020-01-01", encoding="utf-8")
 
-        with patch("auto_update.BASE_DIR", temp_dir):
-            from auto_update import needs_update
+        with patch("lifecalendar.auto_update.BASE_DIR", temp_dir):
+            from lifecalendar.auto_update import needs_update
             assert needs_update() is True
 
     def test_today_timestamp_skips(self, temp_dir):
@@ -71,8 +71,8 @@ class TestNeedsUpdate:
         ts_file = temp_dir / ".last_update_date"
         ts_file.write_text(str(date.today()), encoding="utf-8")
 
-        with patch("auto_update.BASE_DIR", temp_dir):
-            from auto_update import needs_update
+        with patch("lifecalendar.auto_update.BASE_DIR", temp_dir):
+            from lifecalendar.auto_update import needs_update
             assert needs_update() is False
 
     def test_future_timestamp_still_needs_update(self, temp_dir):
@@ -80,16 +80,16 @@ class TestNeedsUpdate:
         ts_file = temp_dir / ".last_update_date"
         ts_file.write_text("2999-12-31", encoding="utf-8")
 
-        with patch("auto_update.BASE_DIR", temp_dir):
-            from auto_update import needs_update
+        with patch("lifecalendar.auto_update.BASE_DIR", temp_dir):
+            from lifecalendar.auto_update import needs_update
             assert needs_update() is True
 
 
 class TestMarkUpdated:
     def test_creates_timestamp_file(self, temp_dir):
         """mark_updated() should create the timestamp file."""
-        with patch("auto_update.BASE_DIR", temp_dir):
-            from auto_update import mark_updated
+        with patch("lifecalendar.auto_update.BASE_DIR", temp_dir):
+            from lifecalendar.auto_update import mark_updated
             mark_updated()
 
         ts_file = temp_dir / ".last_update_date"
@@ -103,17 +103,17 @@ class TestMain:
         ts_file = temp_dir / ".last_update_date"
         ts_file.write_text(str(date.today()), encoding="utf-8")
 
-        with patch("auto_update.BASE_DIR", temp_dir), \
-             patch("auto_update.get_base_dir", return_value=temp_dir):
-            from auto_update import main
+        with patch("lifecalendar.auto_update.BASE_DIR", temp_dir), \
+             patch("lifecalendar.auto_update.get_base_dir", return_value=temp_dir):
+            from lifecalendar.auto_update import main
             result = main(argv=[])
             assert result == 0
 
     def test_missing_config_returns_1(self, temp_dir):
         """main() should return 1 if config file is missing."""
-        with patch("auto_update.BASE_DIR", temp_dir), \
-             patch("auto_update.get_base_dir", return_value=temp_dir):
-            from auto_update import main
+        with patch("lifecalendar.auto_update.BASE_DIR", temp_dir), \
+             patch("lifecalendar.auto_update.get_base_dir", return_value=temp_dir):
+            from lifecalendar.auto_update import main
             result = main(argv=[])
             assert result == 1
 
@@ -128,11 +128,11 @@ class TestMain:
             import shutil
             shutil.copy(engine_src, engine_dst)
 
-        with patch("auto_update.BASE_DIR", temp_dir), \
-             patch("auto_update.get_base_dir", return_value=temp_dir):
+        with patch("lifecalendar.auto_update.BASE_DIR", temp_dir), \
+             patch("lifecalendar.auto_update.get_base_dir", return_value=temp_dir):
             # Mock the engine's run_auto to avoid real wallpaper setting
-            with patch("wallpaper_engine.WallpaperEngine.run_auto", return_value=True):
-                from auto_update import main
+            with patch("lifecalendar.wallpaper_engine.WallpaperEngine.run_auto", return_value=True):
+                from lifecalendar.auto_update import main
                 result = main(argv=[])
                 assert result == 0
 
@@ -171,11 +171,11 @@ class TestConcurrentHeadlessUpdates:
             """Worker calls auto_update.main() while syncing with barrier."""
             start_barrier.wait()  # Synchronize with other thread
             try:
-                with patch("auto_update.BASE_DIR", temp_dir), \
-                     patch("auto_update.get_base_dir", return_value=temp_dir):
+                with patch("lifecalendar.auto_update.BASE_DIR", temp_dir), \
+                     patch("lifecalendar.auto_update.get_base_dir", return_value=temp_dir):
                     # Mock run_auto to avoid real wallpaper setting (but lock still acquired)
-                    with patch("wallpaper_engine.WallpaperEngine.run_auto", return_value=True):
-                        from auto_update import main
+                    with patch("lifecalendar.wallpaper_engine.WallpaperEngine.run_auto", return_value=True):
+                        from lifecalendar.auto_update import main
                         exit_code = main(argv=[])
                         with results_lock:
                             results["success"].append((worker_id, exit_code))

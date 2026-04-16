@@ -67,7 +67,7 @@ def test_startup_check_opens_today_view_when_missing_checkin(tmp_path):
 
 
 def test_headless_update_delegates_to_auto_update_main():
-    with patch("auto_update.main", return_value=7) as mock_auto_update:
+    with patch("lifecalendar.auto_update.main", return_value=7) as mock_auto_update:
         result = life_calendar_gui.main(["--headless-update"])
 
     assert result == 7

@@ -15,42 +15,42 @@ class TestTimestampValidation:
 
     def test_valid_timestamp_today_skips_update(self, tmp_path):
         """Valid today timestamp should skip update."""
-        from auto_update import needs_update
+        from lifecalendar.auto_update import needs_update
 
         ts_file = tmp_path / ".last_update_date"
         ts_file.write_text(str(date.today()), encoding="utf-8")
 
-        with patch("auto_update.BASE_DIR", tmp_path):
+        with patch("lifecalendar.auto_update.BASE_DIR", tmp_path):
             assert needs_update() is False
 
     def test_invalid_timestamp_short(self, tmp_path):
         """Incomplete date should trigger update."""
-        from auto_update import needs_update
+        from lifecalendar.auto_update import needs_update
 
         ts_file = tmp_path / ".last_update_date"
         ts_file.write_text("2026-03", encoding="utf-8")
 
-        with patch("auto_update.BASE_DIR", tmp_path):
+        with patch("lifecalendar.auto_update.BASE_DIR", tmp_path):
             assert needs_update() is True
 
     def test_invalid_timestamp_garbage(self, tmp_path):
         """Random text should trigger update."""
-        from auto_update import needs_update
+        from lifecalendar.auto_update import needs_update
 
         ts_file = tmp_path / ".last_update_date"
         ts_file.write_text("abc-def-ghi", encoding="utf-8")
 
-        with patch("auto_update.BASE_DIR", tmp_path):
+        with patch("lifecalendar.auto_update.BASE_DIR", tmp_path):
             assert needs_update() is True
 
     def test_invalid_calendar_date_triggers_update(self, tmp_path):
         """Impossible dates like YYYY-99-99 should trigger update."""
-        from auto_update import needs_update
+        from lifecalendar.auto_update import needs_update
 
         ts_file = tmp_path / ".last_update_date"
         ts_file.write_text("2026-99-99", encoding="utf-8")
 
-        with patch("auto_update.BASE_DIR", tmp_path):
+        with patch("lifecalendar.auto_update.BASE_DIR", tmp_path):
             assert needs_update() is True
 
 

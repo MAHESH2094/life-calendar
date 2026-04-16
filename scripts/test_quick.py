@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Quick test of critical imports and config."""
 
-from daily_companion import merge_config
+from lifecalendar.daily_companion import merge_config
 
 config = merge_config()
 

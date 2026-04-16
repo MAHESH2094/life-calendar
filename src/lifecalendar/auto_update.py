@@ -172,7 +172,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     # Import here to catch ImportError and handle gracefully
     try:
-        from wallpaper_engine import WallpaperEngine, logger, force_release_lock
+        from .wallpaper_engine import WallpaperEngine, logger, force_release_lock
     except ImportError as e:
         sys.stderr.write(f"ERROR: Failed to import wallpaper_engine: {e}\n")
         sys.stderr.write("Solution: Run 'pip install -r requirements.txt'\n")
@@ -247,7 +247,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         if args.dry_run:
             # D6: Test mode - generate but don't set or mark as updated
             try:
-                from wallpaper_engine import acquire_lock, release_lock
+                from .wallpaper_engine import acquire_lock, release_lock
                 # FIX: [20] Use bounded lock wait in scheduler paths.
                 acquire_lock(timeout_seconds=10)
                 try:

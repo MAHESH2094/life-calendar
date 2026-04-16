@@ -155,7 +155,7 @@ class TestInstallWindowsTask:
 
         # Patch sync_windows_tasks at the point it's imported
         with patch("life_calendar_cli.BASE_DIR", temp_dir):
-            with patch.object(__import__('windows_automation'), 'sync_windows_tasks', return_value=(True, [])):
+            with patch.object(__import__('lifecalendar.windows_automation', fromlist=['sync_windows_tasks']), 'sync_windows_tasks', return_value=(True, [])):
                 from life_calendar_cli import _install_windows_task
                 # Should not raise an exception
                 try:
@@ -180,7 +180,7 @@ class TestMainEntrypoint:
 
         with patch("life_calendar_cli.CONFIG_PATH", config_path), \
              patch("life_calendar_cli.BASE_DIR", temp_dir), \
-             patch("wallpaper_engine.WallpaperEngine.run_auto", return_value=True):
+             patch("lifecalendar.wallpaper_engine.WallpaperEngine.run_auto", return_value=True):
             from life_calendar_cli import _run_once
             with pytest.raises(SystemExit) as exc_info:
                 _run_once()

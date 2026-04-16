@@ -23,8 +23,8 @@ import shutil
 import signal
 import atexit
 
-from auto_update import get_base_dir as shared_get_base_dir
-from daily_companion import get_today_metrics, merge_config
+from .auto_update import get_base_dir as shared_get_base_dir
+from .daily_companion import get_today_metrics, merge_config
 
 # ==================== DPI AWARENESS (Windows) ====================
 if sys.platform == "win32":

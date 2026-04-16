@@ -4,7 +4,10 @@ import platform
 import sys
 from pathlib import Path
 
-from windows_automation import (
+# Add src to sys.path to resolve lifecalendar package
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+from lifecalendar.windows_automation import (
     STARTUP_TASK_NAME,
     WALLPAPER_TASK_NAME,
     remove_windows_task,

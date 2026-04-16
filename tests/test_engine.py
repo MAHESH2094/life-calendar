@@ -10,7 +10,7 @@ import pytest
 from pathlib import Path
 from datetime import datetime, date, timedelta
 
-from wallpaper_engine import (
+from lifecalendar.wallpaper_engine import (
     WallpaperEngine,
     LifeCalendarData,
     YearCalendarData,

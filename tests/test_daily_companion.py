@@ -4,7 +4,7 @@ import json
 from datetime import date, datetime
 import pytest
 
-from daily_companion import DailyCheckinStore, get_today_metrics, merge_config
+from lifecalendar.daily_companion import DailyCheckinStore, get_today_metrics, merge_config
 
 
 def test_merge_config_adds_automation_defaults():

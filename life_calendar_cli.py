@@ -7,9 +7,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-from auto_update import get_base_dir as shared_get_base_dir
-from daily_companion import merge_config
-from wallpaper_engine import WallpaperEngine, force_release_lock
+# Add src to sys.path to resolve lifecalendar package
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+from lifecalendar.auto_update import get_base_dir as shared_get_base_dir
+from lifecalendar.daily_companion import merge_config
+from lifecalendar.wallpaper_engine import WallpaperEngine, force_release_lock
 
 # FIX: [29] Reuse centralized base-dir resolution.
 BASE_DIR = shared_get_base_dir()

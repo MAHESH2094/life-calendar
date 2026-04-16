@@ -28,11 +28,11 @@ class TestLockFileHandling:
 
     def test_acquire_lock_first_time(self, temp_dir):
         """First lock acquisition should succeed."""
-        from wallpaper_engine import acquire_lock, release_lock
+        from lifecalendar.wallpaper_engine import acquire_lock, release_lock
 
         # Patch LOCK_FILE to use our temp directory
         lock_path = temp_dir / ".life_calendar.lock"
-        with patch("wallpaper_engine.LOCK_FILE", str(lock_path)):
+        with patch("lifecalendar.wallpaper_engine.LOCK_FILE", str(lock_path)):
             acquire_lock()
             assert lock_path.exists()
             # Verify lock metadata contains current PID
@@ -44,10 +44,10 @@ class TestLockFileHandling:
 
     def test_acquire_lock_duplicate_fails(self, temp_dir):
         """Trying to acquire lock twice should raise RuntimeError."""
-        from wallpaper_engine import acquire_lock, release_lock
+        from lifecalendar.wallpaper_engine import acquire_lock, release_lock
 
         lock_path = temp_dir / ".life_calendar.lock"
-        with patch("wallpaper_engine.LOCK_FILE", str(lock_path)):
+        with patch("lifecalendar.wallpaper_engine.LOCK_FILE", str(lock_path)):
             acquire_lock()
 
             # Second acquisition should fail
@@ -58,11 +58,11 @@ class TestLockFileHandling:
 
     def test_stale_lock_cleanup(self, temp_dir):
         """Lock owned by dead PID should be cleaned up automatically."""
-        from wallpaper_engine import acquire_lock, release_lock
+        from lifecalendar.wallpaper_engine import acquire_lock, release_lock
         import time
 
         lock_path = temp_dir / ".life_calendar.lock"
-        with patch("wallpaper_engine.LOCK_FILE", str(lock_path)):
+        with patch("lifecalendar.wallpaper_engine.LOCK_FILE", str(lock_path)):
             # Create a stale lock file (old PID, old timestamp)
             stale_pid = 99999  # Non-existent PID
             lock_path.write_text(str(stale_pid), encoding="utf-8")
@@ -72,7 +72,7 @@ class TestLockFileHandling:
             os.utime(lock_path, (old_time, old_time))
 
             # Mock _is_process_running to always return False for old pid
-            with patch("wallpaper_engine._is_process_running", return_value=False):
+            with patch("lifecalendar.wallpaper_engine._is_process_running", return_value=False):
                 # This should clean up the stale lock
                 acquire_lock()
                 assert lock_path.exists()
@@ -80,10 +80,10 @@ class TestLockFileHandling:
 
     def test_corrupted_lock_file_cleaned(self, temp_dir):
         """Corrupted lock file (non-numeric PID) should be removed and lock acquired."""
-        from wallpaper_engine import acquire_lock, release_lock
+        from lifecalendar.wallpaper_engine import acquire_lock, release_lock
 
         lock_path = temp_dir / ".life_calendar.lock"
-        with patch("wallpaper_engine.LOCK_FILE", str(lock_path)):
+        with patch("lifecalendar.wallpaper_engine.LOCK_FILE", str(lock_path)):
             # Write garbage to lock file
             lock_path.write_text("not_a_pid", encoding="utf-8")
 
@@ -96,16 +96,16 @@ class TestLockFileHandling:
 
     def test_release_lock_when_missing(self, temp_dir):
         """release_lock should not crash if lock file doesn't exist."""
-        from wallpaper_engine import release_lock
+        from lifecalendar.wallpaper_engine import release_lock
 
         lock_path = temp_dir / ".life_calendar.lock"
-        with patch("wallpaper_engine.LOCK_FILE", str(lock_path)):
+        with patch("lifecalendar.wallpaper_engine.LOCK_FILE", str(lock_path)):
             # Lock doesn't exist - should not raise
             release_lock()  # Should succeed silently
 
     def test_concurrent_acquire_only_one_process_wins(self, temp_dir):
         """Concurrent acquire attempts should allow exactly one winner."""
-        from wallpaper_engine import acquire_lock, release_lock
+        from lifecalendar.wallpaper_engine import acquire_lock, release_lock
 
         lock_path = temp_dir / ".life_calendar.lock"
         start_barrier = threading.Barrier(6)
@@ -123,7 +123,7 @@ class TestLockFileHandling:
                 with winners_lock:
                     errors.append("busy")
 
-        with patch("wallpaper_engine.LOCK_FILE", str(lock_path)):
+        with patch("lifecalendar.wallpaper_engine.LOCK_FILE", str(lock_path)):
             threads = [threading.Thread(target=worker) for _ in range(5)]
             for t in threads:
                 t.start()
@@ -142,10 +142,10 @@ class TestLockFileHandling:
 
     def test_force_release_lock_removes_existing_lock(self, temp_dir):
         """force_release_lock should remove lock file even if already present."""
-        from wallpaper_engine import acquire_lock, force_release_lock
+        from lifecalendar.wallpaper_engine import acquire_lock, force_release_lock
 
         lock_path = temp_dir / ".life_calendar.lock"
-        with patch("wallpaper_engine.LOCK_FILE", str(lock_path)):
+        with patch("lifecalendar.wallpaper_engine.LOCK_FILE", str(lock_path)):
             acquire_lock()
             assert lock_path.exists()
             released = force_release_lock("test cleanup")

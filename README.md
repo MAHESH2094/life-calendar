@@ -284,14 +284,17 @@ Check `wallpaper.log` – different desktop environments need different commands
 ```
 life_calendar/
 ├── life_calendar_gui.py      # GUI interface (tkinter)
-├── wallpaper_engine.py       # Core generation logic
-├── auto_update.py            # Headless scheduler runner
-├── build_exe.py              # Build script
-├── requirements.txt          # Dependencies
-└── LifeCalendar_Package/     # Distribution folder (built by build_exe.py)
-    ├── LifeCalendar.exe
-    ├── life_calendar_config.json
-    └── wallpaper.log
+├── life_calendar_cli.py      # CLI helper
+├── uninstall.py              # Cleanup script
+├── src/
+│   └── lifecalendar/         # Core package
+│       ├── auto_update.py    # Headless scheduler runner
+│       ├── daily_companion.py# Logic for tracking progress
+│       ├── wallpaper_engine.py# Core generation logic
+│       └── windows_automation.py# Windows task scheduling
+├── tests/                    # Comprehensive test suite
+├── scripts/                  # Build and release scripts
+└── requirements.txt          # Dependencies
 ```
 
 ### Build EXE
