@@ -486,7 +486,7 @@ def normalize_note(note: Any, max_length: int = 120) -> str:
     if not isinstance(note, str):
         return ""
     single_line = " ".join(note.replace("\r", " ").replace("\n", " ").split())
-    return single_line[:sanitize_max_note_length(max_length)]
+    return single_line[:max(1, min(max_length, MAX_ALLOWED_NOTE_LENGTH))]
 
 
 def _is_leap_year(year: int) -> bool:

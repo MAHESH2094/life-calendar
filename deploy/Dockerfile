@@ -13,6 +13,7 @@ COPY . /app
 
 # Runtime state is stored in /app/data so compose can mount it safely.
 ENV LIFECALENDAR_DATA_DIR=/app/data
+ENV PYTHONPATH=/app/src
 
 # Run as non-root user for security
 RUN groupadd -g 1000 lifecal && \
@@ -22,7 +23,7 @@ RUN groupadd -g 1000 lifecal && \
 USER lifecal
 
 # Make entrypoint executable
-RUN chmod +x /app/docker-entrypoint.sh
+RUN chmod +x /app/deploy/docker-entrypoint.sh
 
 # Use entrypoint script with graceful shutdown support
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
+ENTRYPOINT ["/app/deploy/docker-entrypoint.sh"]

@@ -34,7 +34,7 @@ echo "[entrypoint] Updates will run every 60 seconds."
 # The auto_update script only generates a wallpaper when the date has changed,
 # so running it frequently has minimal overhead.
 while true; do
-    python "${APP_DIR}/auto_update.py"
+    python -m lifecalendar.auto_update
     # Use 'sleep & wait' pattern so signals are caught during sleep
     sleep 60 &
     wait $!

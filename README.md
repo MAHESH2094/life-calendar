@@ -75,7 +75,7 @@ The cron job runs at 00:01 am every night. Check `cron.log` if it doesn't work.
 
 ```bash
 # One-command deployment
-docker compose up -d
+docker compose -f deploy/docker-compose.yml up -d
 
 # Set your configuration
 nano data/life_calendar_config.json
@@ -149,7 +149,7 @@ pip install -r requirements.txt
 ### Build Standalone EXE
 
 ```bash
-python build_exe.py
+python scripts/build_exe.py
 ```
 
 Output: `LifeCalendar_Package/LifeCalendar.exe` (GUI + headless flags)

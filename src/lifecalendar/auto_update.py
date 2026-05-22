@@ -14,12 +14,22 @@ NOTE: Scheduler registration is handled by GUI, not this updater.
       This script has SINGLE RESPONSIBILITY: update the wallpaper.
 """
 
+import json
 import re
 import sys
 import os
 import logging
 from pathlib import Path
 from typing import Optional
+
+
+def _find_source_root(start: Path) -> Path:
+    """Locate the project root by walking upwards for entrypoint scripts."""
+    markers = ("life_calendar_gui.py", "life_calendar_cli.py", "requirements.txt")
+    for parent in start.parents:
+        if any((parent / m).exists() for m in markers):
+            return parent
+    return start.parent
 
 
 def get_base_dir() -> Path:
@@ -36,9 +46,9 @@ def get_base_dir() -> Path:
     if getattr(sys, 'frozen', False):
         # Running as PyInstaller EXE - config is in same folder as EXE
         return Path(sys.executable).parent.absolute()
-    else:
-        # Running as Python script
-        return Path(__file__).parent.absolute()
+
+    # Running from source: prefer the repository root.
+    return _find_source_root(Path(__file__).resolve()).absolute()
 
 
 # Get correct base directory (do this ONCE at module level)
@@ -145,6 +155,32 @@ def mark_updated() -> None:
         LOGGER.warning("mark_updated failed: %s", exc)
 
 
+def _lock_held_by_other_process(lock_file: Path) -> bool:
+    """Return True if the lock file is owned by a currently running process."""
+    if not lock_file.exists():
+        return False
+
+    try:
+        raw = lock_file.read_text(encoding="utf-8").strip()
+        if not raw:
+            return False
+
+        if raw.isdigit():
+            pid = int(raw)
+        else:
+            payload = json.loads(raw)
+            pid = int(payload.get("pid", 0))
+
+        if pid <= 0:
+            return False
+
+        from .lock import _is_process_running
+
+        return _is_process_running(pid)
+    except Exception:
+        return False
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     """
     Main entry point for auto-update.
@@ -172,9 +208,10 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     # Import here to catch ImportError and handle gracefully
     try:
-        from .wallpaper_engine import WallpaperEngine, logger, force_release_lock
+        from .engine import WallpaperEngine, logger
+        from .lock import force_release_lock
     except ImportError as e:
-        sys.stderr.write(f"ERROR: Failed to import wallpaper_engine: {e}\n")
+        sys.stderr.write(f"ERROR: Failed to import engine: {e}\n")
         sys.stderr.write("Solution: Run 'pip install -r requirements.txt'\n")
         return 1
 
@@ -247,7 +284,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         if args.dry_run:
             # D6: Test mode - generate but don't set or mark as updated
             try:
-                from .wallpaper_engine import acquire_lock, release_lock
+                from .lock import acquire_lock, release_lock
                 # FIX: [20] Use bounded lock wait in scheduler paths.
                 acquire_lock(timeout_seconds=10)
                 try:
@@ -295,29 +332,33 @@ def main(argv: Optional[list[str]] = None) -> int:
                                 logger.debug(f"Could not remove {error_file_name}: {e}")
 
                 return 0
-            else:
-                logger.error("Wallpaper generation or setting failed")
+            lock_file = BASE_DIR / ".life_calendar.lock"
+            if _lock_held_by_other_process(lock_file):
+                logger.info("Another update is already running - skipping without error")
+                return 0
 
-                # Write error file for visibility
-                error_file = BASE_DIR / "ERROR_GENERATION_FAILED.txt"
-                try:
-                    error_file.write_text(
-                        "Life Calendar Error\n"
-                        "===================\n"
-                        "Wallpaper generation failed\n\n"
-                        "Check wallpaper.log for details",
-                        encoding="utf-8",
-                    )
-                except OSError as e:
-                    import errno
-                    if e.errno == errno.EACCES:
-                        logger.error(f"Permission denied writing error file: {e}")
-                    elif e.errno == errno.ENOSPC:
-                        logger.error(f"No space left on device: {e}")
-                    else:
-                        logger.error(f"Could not write error file: {e}")
+            logger.error("Wallpaper generation or setting failed")
 
-                return 1
+            # Write error file for visibility
+            error_file = BASE_DIR / "ERROR_GENERATION_FAILED.txt"
+            try:
+                error_file.write_text(
+                    "Life Calendar Error\n"
+                    "===================\n"
+                    "Wallpaper generation failed\n\n"
+                    "Check wallpaper.log for details",
+                    encoding="utf-8",
+                )
+            except OSError as e:
+                import errno
+                if e.errno == errno.EACCES:
+                    logger.error(f"Permission denied writing error file: {e}")
+                elif e.errno == errno.ENOSPC:
+                    logger.error(f"No space left on device: {e}")
+                else:
+                    logger.error(f"Could not write error file: {e}")
+
+            return 1
 
     except FileNotFoundError as e:
         logger.error(f"File not found: {e}")

@@ -9,6 +9,7 @@ import json
 import pytest
 from pathlib import Path
 from datetime import datetime, date, timedelta
+from unittest.mock import patch
 
 from lifecalendar.wallpaper_engine import (
     WallpaperEngine,
@@ -64,7 +65,12 @@ def write_config(tmp_path, data):
 
 @pytest.fixture
 def temp_dir(tmp_path):
-    """Change CWD to a temporary directory and restore after test."""
+    """Change CWD to a temporary directory and restore after test.
+
+    WallpaperEngine resolves config_file to an absolute path, so os.chdir
+    isn't strictly needed for that.  It IS needed for any code that reads
+    BASE_DIR-relative paths (e.g. wallpaper_path) at runtime.
+    """
     cwd = os.getcwd()
     os.chdir(tmp_path)
     yield tmp_path
@@ -105,11 +111,14 @@ class TestLifeCalendarData:
 
     def test_newborn(self):
         """A person born today has 0 weeks lived."""
-        today = date.today().strftime("%Y-%m-%d")
-        lcd = LifeCalendarData(today, 90)
-        total, filled, _ = lcd.calculate()
-        assert filled == 0
-        assert total > 0
+        fixed = date(2025, 5, 14)
+        with patch("lifecalendar.data.date") as mock_date:
+            mock_date.today.return_value = fixed
+            mock_date.side_effect = lambda *a, **k: date(*a, **k)
+            lcd = LifeCalendarData("2025-05-14", 90)
+            total, filled, _ = lcd.calculate()
+            assert filled == 0
+            assert total > 0
 
     def test_lifespan_clamped_to_min(self):
         lcd = LifeCalendarData("1990-01-01", 0)  # Below minimum
@@ -147,16 +156,35 @@ class TestLifeCalendarData:
 
 class TestYearCalendarData:
     def test_day_within_range(self):
-        ycd = YearCalendarData()
-        total, filled, stats = ycd.calculate()
-        assert 365 <= total <= 366
-        assert 1 <= filled <= total
-        assert "Year" in stats
+        fixed = date(2025, 6, 15)
+        with patch("lifecalendar.data.date") as mock_date:
+            mock_date.today.return_value = fixed
+            mock_date.side_effect = lambda *a, **k: date(*a, **k)
+            ycd = YearCalendarData()
+            total, filled, stats = ycd.calculate()
+            assert total == 365  # 2025 is not a leap year
+            assert filled == 166  # Jun 15 = day 166
+            assert "Year 2025" in stats
+
+    def test_day_within_range_leap_year(self):
+        fixed = date(2024, 12, 31)
+        with patch("lifecalendar.data.date") as mock_date:
+            mock_date.today.return_value = fixed
+            mock_date.side_effect = lambda *a, **k: date(*a, **k)
+            ycd = YearCalendarData()
+            total, filled, stats = ycd.calculate()
+            assert total == 366  # 2024 is a leap year
+            assert filled == 366
+            assert "2024" in stats
 
     def test_title_contains_current_year(self):
-        ycd = YearCalendarData()
-        title = ycd.get_title()
-        assert str(date.today().year) in title
+        fixed = date(2025, 3, 1)
+        with patch("lifecalendar.data.date") as mock_date:
+            mock_date.today.return_value = fixed
+            mock_date.side_effect = lambda *a, **k: date(*a, **k)
+            ycd = YearCalendarData()
+            title = ycd.get_title()
+            assert "2025" in title
 
     def test_legend(self):
         ycd = YearCalendarData()
@@ -324,11 +352,20 @@ class TestConfigValidation:
         with pytest.raises(ValueError, match="at most 7680x4320"):
             engine.validate_config()
 
-    def test_palette_missing_required_keys(self, temp_dir):
+    def test_palette_missing_keys_backfilled_by_merge(self, temp_dir):
+        """Partial palette is backfilled by merge_config, so validation passes."""
         cfg_path = write_config(temp_dir, make_config("life", palette={"title": "#ffffff"}))
         engine = WallpaperEngine(cfg_path)
-        # merge_config now backfills missing palette keys from defaults.
         engine.validate_config()
+
+    def test_palette_missing_required_keys_raw(self, temp_dir):
+        """validate_config rejects a palette that is actually missing keys."""
+        cfg_path = write_config(temp_dir, make_config("life"))
+        engine = WallpaperEngine(cfg_path)
+        # Inject a partial palette after load to bypass merge_config backfill.
+        engine.config["palette"] = {"title": "#ffffff"}
+        with pytest.raises(ValueError, match="missing required keys"):
+            engine.validate_config()
 
     def test_palette_invalid_hex_value(self, temp_dir):
         bad_palette = make_config("life")["palette"]
@@ -361,6 +398,14 @@ class TestConfigValidation:
         with pytest.raises(ValueError, match="title is required"):
             engine.validate_config()
 
+    def test_goal_whitespace_only_title(self, temp_dir):
+        cfg_path = write_config(temp_dir, make_config(
+            "goal", goal_start="2025-01-01", goal_end="2025-12-31", goal_title="   "
+        ))
+        engine = WallpaperEngine(cfg_path)
+        with pytest.raises(ValueError, match="title is required"):
+            engine.validate_config()
+
     def test_goal_missing_dates(self, temp_dir):
         cfg_path = write_config(temp_dir, make_config(
             "goal", goal_start="", goal_end="", goal_title="Test"
@@ -372,9 +417,9 @@ class TestConfigValidation:
     def test_unknown_mode(self, temp_dir):
         cfg_path = write_config(temp_dir, make_config("unknown_mode"))
         engine = WallpaperEngine(cfg_path)
-        # Unknown mode should raise during generation (not validation currently)
-        success, _ = engine.generate_wallpaper()
+        success, msg = engine.generate_wallpaper()
         assert not success
+        assert "Unknown mode" in msg
 
     def test_year_mode_needs_no_extra_config(self, temp_dir):
         cfg_path = write_config(temp_dir, make_config("year"))
@@ -420,6 +465,21 @@ class TestWallpaperGeneration:
 
     def test_generate_goal_wallpaper(self, temp_dir):
         cfg_path = write_config(temp_dir, make_config("goal"))
+        engine = WallpaperEngine(cfg_path)
+        ok, msg = engine.generate_wallpaper()
+        assert ok, msg
+
+    def test_generate_returns_path_on_success(self, temp_dir):
+        cfg_path = write_config(temp_dir, make_config("year"))
+        engine = WallpaperEngine(cfg_path)
+        ok, msg = engine.generate_wallpaper()
+        assert ok
+        assert "Wallpaper generated" in msg
+        assert ".png" in msg
+
+    def test_generate_exceeding_max_grid_units(self, temp_dir):
+        """A lifespan so large it exceeds MAX_GRID_UNITS still succeeds (grid skipped)."""
+        cfg_path = write_config(temp_dir, make_config("life", lifespan=150))
         engine = WallpaperEngine(cfg_path)
         ok, msg = engine.generate_wallpaper()
         assert ok, msg

@@ -1,12 +1,14 @@
 version: "3.9"
 services:
   life-calendar:
-    build: .
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
     container_name: life-calendar
     restart: unless-stopped
     volumes:
       # Persist runtime state without hiding application code in /app.
-      - ./data:/app/data
+      - ../data:/app/data
     environment:
       - TZ=America/New_York   # adjust to your timezone if needed
       - LIFECALENDAR_DATA_DIR=/app/data

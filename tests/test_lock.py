@@ -32,7 +32,7 @@ class TestLockFileHandling:
 
         # Patch LOCK_FILE to use our temp directory
         lock_path = temp_dir / ".life_calendar.lock"
-        with patch("lifecalendar.wallpaper_engine.LOCK_FILE", str(lock_path)):
+        with patch("lifecalendar.lock.LOCK_FILE", str(lock_path)):
             acquire_lock()
             assert lock_path.exists()
             # Verify lock metadata contains current PID
@@ -47,7 +47,7 @@ class TestLockFileHandling:
         from lifecalendar.wallpaper_engine import acquire_lock, release_lock
 
         lock_path = temp_dir / ".life_calendar.lock"
-        with patch("lifecalendar.wallpaper_engine.LOCK_FILE", str(lock_path)):
+        with patch("lifecalendar.lock.LOCK_FILE", str(lock_path)):
             acquire_lock()
 
             # Second acquisition should fail
@@ -62,7 +62,7 @@ class TestLockFileHandling:
         import time
 
         lock_path = temp_dir / ".life_calendar.lock"
-        with patch("lifecalendar.wallpaper_engine.LOCK_FILE", str(lock_path)):
+        with patch("lifecalendar.lock.LOCK_FILE", str(lock_path)):
             # Create a stale lock file (old PID, old timestamp)
             stale_pid = 99999  # Non-existent PID
             lock_path.write_text(str(stale_pid), encoding="utf-8")
@@ -72,7 +72,7 @@ class TestLockFileHandling:
             os.utime(lock_path, (old_time, old_time))
 
             # Mock _is_process_running to always return False for old pid
-            with patch("lifecalendar.wallpaper_engine._is_process_running", return_value=False):
+            with patch("lifecalendar.lock._is_process_running", return_value=False):
                 # This should clean up the stale lock
                 acquire_lock()
                 assert lock_path.exists()
@@ -83,7 +83,7 @@ class TestLockFileHandling:
         from lifecalendar.wallpaper_engine import acquire_lock, release_lock
 
         lock_path = temp_dir / ".life_calendar.lock"
-        with patch("lifecalendar.wallpaper_engine.LOCK_FILE", str(lock_path)):
+        with patch("lifecalendar.lock.LOCK_FILE", str(lock_path)):
             # Write garbage to lock file
             lock_path.write_text("not_a_pid", encoding="utf-8")
 
@@ -99,7 +99,7 @@ class TestLockFileHandling:
         from lifecalendar.wallpaper_engine import release_lock
 
         lock_path = temp_dir / ".life_calendar.lock"
-        with patch("lifecalendar.wallpaper_engine.LOCK_FILE", str(lock_path)):
+        with patch("lifecalendar.lock.LOCK_FILE", str(lock_path)):
             # Lock doesn't exist - should not raise
             release_lock()  # Should succeed silently
 
@@ -123,7 +123,7 @@ class TestLockFileHandling:
                 with winners_lock:
                     errors.append("busy")
 
-        with patch("lifecalendar.wallpaper_engine.LOCK_FILE", str(lock_path)):
+        with patch("lifecalendar.lock.LOCK_FILE", str(lock_path)):
             threads = [threading.Thread(target=worker) for _ in range(5)]
             for t in threads:
                 t.start()
@@ -145,7 +145,7 @@ class TestLockFileHandling:
         from lifecalendar.wallpaper_engine import acquire_lock, force_release_lock
 
         lock_path = temp_dir / ".life_calendar.lock"
-        with patch("lifecalendar.wallpaper_engine.LOCK_FILE", str(lock_path)):
+        with patch("lifecalendar.lock.LOCK_FILE", str(lock_path)):
             acquire_lock()
             assert lock_path.exists()
             released = force_release_lock("test cleanup")

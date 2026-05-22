@@ -54,9 +54,11 @@ def _install_cron(cron_time: str = "1 0 * * *") -> None:
         print("ERROR: Cron is not used on Windows - use --install-win instead.")
         sys.exit(1)
 
-    wrapper = BASE_DIR / "cron_wrapper.sh"
+    wrapper = BASE_DIR / "deploy" / "cron_wrapper.sh"
     if not wrapper.exists():
-        print(f"ERROR: {wrapper} not found. Please ensure cron_wrapper.sh is in the repo.")
+        wrapper = BASE_DIR / "cron_wrapper.sh"
+    if not wrapper.exists():
+        print(f"ERROR: {wrapper} not found. Please ensure cron_wrapper.sh is available.")
         sys.exit(1)
 
     log_path = shlex.quote(str(BASE_DIR / "cron.log"))
@@ -103,7 +105,7 @@ def _install_windows_task() -> None:
     config_file = BASE_DIR / "life_calendar_config.json"
 
     try:
-        from windows_automation import sync_windows_tasks
+        from lifecalendar.windows_automation import sync_windows_tasks
         import json
 
         with open(config_file, 'r', encoding='utf-8') as f:
@@ -149,9 +151,16 @@ def _install_launchd() -> None:
     plist_path = Path.home() / "Library" / "LaunchAgents" / "com.lifecalendar.wallpaper.plist"
     plist_path.parent.mkdir(parents=True, exist_ok=True)
 
+    wrapper = BASE_DIR / "deploy" / "cron_wrapper.sh"
+    if not wrapper.exists():
+        wrapper = BASE_DIR / "cron_wrapper.sh"
+    if not wrapper.exists():
+        print(f"ERROR: {wrapper} not found. Please ensure cron_wrapper.sh is available.")
+        sys.exit(1)
+
     plist_dict = {
         "Label": "com.lifecalendar.wallpaper",
-        "ProgramArguments": [str(BASE_DIR / "cron_wrapper.sh")],
+        "ProgramArguments": [str(wrapper)],
         "StartCalendarInterval": {
             "Hour": 0,
             "Minute": 1,

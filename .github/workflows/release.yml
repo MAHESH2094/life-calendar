@@ -31,11 +31,13 @@ jobs:
       run: pytest -q
 
     - name: Build EXE
-      run: python build_exe.py
+      run: |
+        cd scripts
+        python build.py --platform windows
 
     - name: Generate checksums
       run: |
-        cd LifeCalendar_Package
+        cd dist/windows/x64
         Get-FileHash -Algorithm SHA256 *.exe | ForEach-Object {
           "$($_.Hash)  $($_.Path | Split-Path -Leaf)"
         } | Out-File -FilePath SHA256SUMS.txt -Encoding utf8
@@ -45,7 +47,6 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         files: |
-          LifeCalendar_Package/LifeCalendar.exe
-          LifeCalendar_Package/LifeCalendarUpdate.exe
-          LifeCalendar_Package/SHA256SUMS.txt
+          dist/windows/x64/LifeCalendar.exe
+          dist/windows/x64/SHA256SUMS.txt
         generate_release_notes: true

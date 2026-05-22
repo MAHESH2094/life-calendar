@@ -121,17 +121,10 @@ class TestMain:
         """main() should generate wallpaper and return 0 on success."""
         _write_config(temp_dir)
 
-        # Copy wallpaper_engine.py to temp_dir so auto_update can import it
-        engine_src = Path(__file__).parent.parent / "wallpaper_engine.py"
-        engine_dst = temp_dir / "wallpaper_engine.py"
-        if engine_src.exists():
-            import shutil
-            shutil.copy(engine_src, engine_dst)
-
         with patch("lifecalendar.auto_update.BASE_DIR", temp_dir), \
              patch("lifecalendar.auto_update.get_base_dir", return_value=temp_dir):
             # Mock the engine's run_auto to avoid real wallpaper setting
-            with patch("lifecalendar.wallpaper_engine.WallpaperEngine.run_auto", return_value=True):
+            with patch("lifecalendar.engine.WallpaperEngine.run_auto", return_value=True):
                 from lifecalendar.auto_update import main
                 result = main(argv=[])
                 assert result == 0
@@ -147,16 +140,9 @@ class TestConcurrentHeadlessUpdates:
     def test_concurrent_auto_update_only_one_succeeds(self, temp_dir):
         """Two concurrent auto_update.main() calls: exactly one should succeed."""
         import threading
-        import shutil
 
         # Setup: create valid config without timestamp
         _write_config(temp_dir)
-
-        # Copy wallpaper_engine.py for imports
-        engine_src = Path(__file__).parent.parent / "wallpaper_engine.py"
-        engine_dst = temp_dir / "wallpaper_engine.py"
-        if engine_src.exists():
-            shutil.copy(engine_src, engine_dst)
 
         # Ensure no timestamp (both processes think update is needed)
         ts_file = temp_dir / ".last_update_date"
@@ -165,7 +151,7 @@ class TestConcurrentHeadlessUpdates:
 
         results = {"success": [], "error": []}
         results_lock = threading.Lock()
-        start_barrier = threading.Barrier(3)  # 2 workers + main thread
+        start_barrier = threading.Barrier(2)  # 2 workers only
 
         def worker(worker_id: int) -> None:
             """Worker calls auto_update.main() while syncing with barrier."""
@@ -174,7 +160,7 @@ class TestConcurrentHeadlessUpdates:
                 with patch("lifecalendar.auto_update.BASE_DIR", temp_dir), \
                      patch("lifecalendar.auto_update.get_base_dir", return_value=temp_dir):
                     # Mock run_auto to avoid real wallpaper setting (but lock still acquired)
-                    with patch("lifecalendar.wallpaper_engine.WallpaperEngine.run_auto", return_value=True):
+                    with patch("lifecalendar.engine.WallpaperEngine.run_auto", return_value=True):
                         from lifecalendar.auto_update import main
                         exit_code = main(argv=[])
                         with results_lock:
@@ -184,17 +170,11 @@ class TestConcurrentHeadlessUpdates:
                     results["error"].append((worker_id, str(exc)))
 
         # Spawn two concurrent threads
-        t1 = threading.Thread(target=worker, args=(1,), daemon=False)
-        t2 = threading.Thread(target=worker, args=(2,), daemon=False)
+        t1 = threading.Thread(target=worker, args=(1,), daemon=True)
+        t2 = threading.Thread(target=worker, args=(2,), daemon=True)
 
         t1.start()
         t2.start()
-
-        # Release barrier (allow both workers to start simultaneously)
-        try:
-            start_barrier.wait(timeout=5)
-        except Exception:
-            pass
 
         # Wait for both to complete
         t1.join(timeout=10)

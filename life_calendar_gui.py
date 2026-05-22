@@ -159,8 +159,22 @@ class LifeCalendarController:
                 self.set_status("Backup failed. Saving config anyway.", warning=True)
 
         try:
-            with open(self.config_file, "w", encoding="utf-8") as file_handle:
-                json.dump(self.config, file_handle, indent=2, ensure_ascii=False)
+            import tempfile
+            config_dir = os.path.dirname(self.config_file) or "."
+            fd, tmp_path = tempfile.mkstemp(dir=config_dir, suffix=".tmp", text=True)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                    json.dump(self.config, fh, indent=2, ensure_ascii=False)
+                try:
+                    os.replace(tmp_path, self.config_file)
+                except OSError:
+                    shutil.move(tmp_path, self.config_file)
+            except Exception:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
             return True
         except OSError as exc:
             self.set_status(f"Failed to save config: {exc}", warning=True)
